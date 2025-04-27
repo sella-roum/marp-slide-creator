@@ -1,426 +1,281 @@
-import { v4 as uuidv4 } from "uuid"
-import type { DocumentType, VersionType, TemplateType, ChatMessageType } from "./types"
+import type { DocumentType, VersionType, ChatMessageType } from './types';
+import { v4 as uuidv4 } from 'uuid';
 
-// IndexedDB configuration
-const DB_NAME = "MarpSlideCreatorDB"
-const DB_VERSION = 1
-const STORES = {
-  DOCUMENTS: "documents",
-  VERSIONS: "versions",
-  TEMPLATES: "templates",
-  CHAT_HISTORY: "chatHistory",
-  SETTINGS: "settings",
-}
+const DB_NAME = 'MarpSlideCreatorDB';
+const DB_VERSION = 2; // バージョンをインクリメント (例: 1 -> 2)
+const DOC_STORE = 'documents';
+const VERSION_STORE = 'versions';
+const CHAT_STORE = 'chatMessages'; // チャットメッセージ用ストア名
 
-// Default templates
-const DEFAULT_TEMPLATES: TemplateType[] = [
-  {
-    id: "default-template-1",
-    title: "Basic Presentation",
-    content: `---
-marp: true
-theme: default
-paginate: true
----
+let db: IDBDatabase | null = null;
 
-# My Presentation
-
----
-
-## Slide 2
-
-Content goes here
-
----
-
-## Thank You
-
-Contact: example@example.com`,
-    createdAt: new Date(),
-    isBuiltIn: true,
-  },
-  {
-    id: "default-template-2",
-    title: "Conference Talk",
-    content: `---
-marp: true
-theme: gaia
-paginate: true
-header: "Conference Name 2023"
-footer: "Speaker Name | @twitter_handle"
----
-
-# Main Title
-
-## Subtitle
-
-Speaker Name
-Date
-
----
-
-# Agenda
-
-1. Introduction
-2. Main Content
-3. Conclusion
-
----
-
-# Thank You!
-
-Questions?`,
-    createdAt: new Date(),
-    isBuiltIn: true,
-  },
-]
-
-// Initialize the database
-export const initializeDB = (): Promise<boolean> => {
+// --- DB初期化関数 (修正) ---
+export function initializeDB(): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (!window.indexedDB) {
-      reject(new Error("Your browser doesn't support IndexedDB"))
-      return
+    if (db) {
+      resolve();
+      return;
     }
 
-    const request = window.indexedDB.open(DB_NAME, DB_VERSION)
+    console.log(`Opening database "${DB_NAME}" with version ${DB_VERSION}...`);
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
 
     request.onerror = (event) => {
-      reject(new Error("Failed to open database"))
-    }
+      console.error("Database error:", request.error);
+      reject(new Error("Failed to open IndexedDB"));
+    };
 
     request.onsuccess = (event) => {
-      resolve(true)
-    }
+      db = request.result;
+      console.log("Database initialized successfully");
+
+      // 接続が予期せず閉じられた場合のハンドラ
+      db.onclose = () => {
+        console.warn("Database connection closed unexpectedly.");
+        db = null; // DB接続をリセット
+      };
+      db.onerror = (event) => {
+        console.error("Database error after connection:", (event.target as IDBRequest).error);
+      };
+
+      resolve();
+    };
 
     request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result
-      const transaction = request.transaction
+      console.log("Upgrading database...");
+      const target = event.target as IDBOpenDBRequest | null;
+      if (!target) return;
+      const currentDb = target.result;
+      const transaction = target.transaction; // アップグレードトランザクションを取得
 
-      // Create object stores
-      if (!db.objectStoreNames.contains(STORES.DOCUMENTS)) {
-        const documentStore = db.createObjectStore(STORES.DOCUMENTS, { keyPath: "id" })
-        documentStore.createIndex("updatedAt", "updatedAt", { unique: false })
+      console.log(`Upgrading from version ${event.oldVersion} to ${event.newVersion}`);
+
+      // 既存のストアがない場合のみ作成
+      if (!currentDb.objectStoreNames.contains(DOC_STORE)) {
+        currentDb.createObjectStore(DOC_STORE, { keyPath: 'id' });
+        console.log(`Object store "${DOC_STORE}" created.`);
       }
-
-      if (!db.objectStoreNames.contains(STORES.VERSIONS)) {
-        const versionStore = db.createObjectStore(STORES.VERSIONS, { keyPath: "id" })
-        versionStore.createIndex("documentId", "documentId", { unique: false })
-        versionStore.createIndex("createdAt", "createdAt", { unique: false })
-      }
-
-      if (!db.objectStoreNames.contains(STORES.TEMPLATES)) {
-        const templateStore = db.createObjectStore(STORES.TEMPLATES, { keyPath: "id" })
-        templateStore.createIndex("isBuiltIn", "isBuiltIn", { unique: false })
-
-        // Add default templates using the existing transaction
-        if (transaction) {
-          const templateObjectStore = transaction.objectStore(STORES.TEMPLATES)
-          DEFAULT_TEMPLATES.forEach((template) => {
-            templateObjectStore.add(template)
-          })
+      if (!currentDb.objectStoreNames.contains(VERSION_STORE)) {
+        const versionStore = currentDb.createObjectStore(VERSION_STORE, { keyPath: 'id' });
+        // インデックス作成はトランザクション完了後に行われるため、ここでは宣言のみ
+        if (!versionStore.indexNames.contains('documentId')) {
+             versionStore.createIndex('documentId', 'documentId', { unique: false });
+             console.log(`Index "documentId" created for store "${VERSION_STORE}".`);
         }
+        console.log(`Object store "${VERSION_STORE}" created.`);
+      }
+      // --- チャットストア作成 ---
+      if (!currentDb.objectStoreNames.contains(CHAT_STORE)) {
+        const chatStore = currentDb.createObjectStore(CHAT_STORE, { keyPath: 'id' });
+        // documentId と timestamp で検索できるようにインデックスを作成
+        // インデックス名は一意にする必要がある
+        if (!chatStore.indexNames.contains('docId_ts')) { // インデックス名を変更
+            // Multi-entry index for documentId and timestamp
+            chatStore.createIndex('docId_ts', ['documentId', 'timestamp'], { unique: false });
+            console.log(`Index "docId_ts" created for store "${CHAT_STORE}".`);
+        }
+         // documentId のみのインデックスも追加 (clearChatMessages で使用)
+        if (!chatStore.indexNames.contains('documentId')) {
+            chatStore.createIndex('documentId', 'documentId', { unique: false });
+            console.log(`Index "documentId" created for store "${CHAT_STORE}".`);
+        }
+        console.log(`Object store "${CHAT_STORE}" created.`);
       }
 
-      if (!db.objectStoreNames.contains(STORES.CHAT_HISTORY)) {
-        const chatStore = db.createObjectStore(STORES.CHAT_HISTORY, { keyPath: "id" })
-        chatStore.createIndex("documentId", "documentId", { unique: false })
-        chatStore.createIndex("timestamp", "timestamp", { unique: false })
-      }
+      console.log("Database upgrade complete.");
+    };
 
-      if (!db.objectStoreNames.contains(STORES.SETTINGS)) {
-        db.createObjectStore(STORES.SETTINGS, { keyPath: "id" })
-      }
+    request.onblocked = () => {
+        console.warn("Database upgrade blocked. Please close other tabs using this application.");
+        reject(new Error("Database upgrade blocked"));
+    };
+  });
+}
+
+// --- ヘルパー関数: トランザクション取得 ---
+function getStore(storeName: string, mode: IDBTransactionMode): IDBObjectStore {
+    if (!db) {
+        console.error("Attempted to get store, but database is not initialized.");
+        throw new Error("Database not initialized");
     }
-  })
-}
-
-// Get a database connection
-const getDBConnection = (): Promise<IDBDatabase> => {
-  return new Promise((resolve, reject) => {
-    const request = window.indexedDB.open(DB_NAME, DB_VERSION)
-
-    request.onerror = () => reject(new Error("Failed to open database"))
-    request.onsuccess = () => resolve(request.result)
-  })
-}
-
-// Document operations
-export const createDocument = async (title: string, content = ""): Promise<DocumentType> => {
-  const db = await getDBConnection()
-  const document: DocumentType = {
-    id: uuidv4(),
-    title,
-    content,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  }
-
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORES.DOCUMENTS, "readwrite")
-    const store = transaction.objectStore(STORES.DOCUMENTS)
-    const request = store.add(document)
-
-    request.onsuccess = () => resolve(document)
-    request.onerror = () => reject(new Error("Failed to create document"))
-
-    transaction.oncomplete = () => db.close()
-  })
-}
-
-export const getDocuments = async (): Promise<DocumentType[]> => {
-  const db = await getDBConnection()
-
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORES.DOCUMENTS, "readonly")
-    const store = transaction.objectStore(STORES.DOCUMENTS)
-    const index = store.index("updatedAt")
-    const request = index.openCursor(null, "prev") // Sort by updatedAt descending
-
-    const documents: DocumentType[] = []
-
-    request.onsuccess = (event) => {
-      const cursor = (event.target as IDBRequest).result
-      if (cursor) {
-        documents.push(cursor.value)
-        cursor.continue()
-      } else {
-        resolve(documents)
-      }
+    try {
+        const transaction = db.transaction(storeName, mode);
+        // トランザクションのエラーハンドリング
+        transaction.onerror = (event) => {
+            console.error(`Transaction error on store "${storeName}":`, (event.target as IDBTransaction).error);
+        };
+        transaction.onabort = (event) => {
+            console.warn(`Transaction aborted on store "${storeName}":`, (event.target as IDBTransaction).error);
+        };
+        return transaction.objectStore(storeName);
+    } catch (e) {
+        console.error(`Failed to start transaction on store "${storeName}":`, e);
+        // DB接続が失われている可能性があるので再初期化を試みる (オプション)
+        // initializeDB().catch(console.error);
+        throw e; // エラーを再スロー
     }
-
-    request.onerror = () => reject(new Error("Failed to get documents"))
-
-    transaction.oncomplete = () => db.close()
-  })
 }
 
-export const getDocument = async (id: string): Promise<DocumentType | null> => {
-  const db = await getDBConnection()
-
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORES.DOCUMENTS, "readonly")
-    const store = transaction.objectStore(STORES.DOCUMENTS)
-    const request = store.get(id)
-
-    request.onsuccess = () => resolve(request.result || null)
-    request.onerror = () => reject(new Error("Failed to get document"))
-
-    transaction.oncomplete = () => db.close()
-  })
+// --- ドキュメント関連関数 ---
+export async function addDocument(doc: Omit<DocumentType, 'id' | 'versions'>): Promise<string> {
+    await initializeDB(); // 念のためDB接続を確認
+    const id = uuidv4();
+    const newDoc = { ...doc, id };
+    const store = getStore(DOC_STORE, 'readwrite');
+    return new Promise((resolve, reject) => {
+        const request = store.add(newDoc);
+        request.onsuccess = () => resolve(id);
+        request.onerror = () => reject(request.error);
+    });
 }
 
-export const updateDocument = async (document: DocumentType): Promise<DocumentType> => {
-  const db = await getDBConnection()
-
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORES.DOCUMENTS, "readwrite")
-    const store = transaction.objectStore(STORES.DOCUMENTS)
-    const request = store.put({
-      ...document,
-      updatedAt: new Date(),
-    })
-
-    request.onsuccess = () => resolve(document)
-    request.onerror = () => reject(new Error("Failed to update document"))
-
-    transaction.oncomplete = () => db.close()
-  })
+export async function getDocuments(): Promise<DocumentType[]> {
+    await initializeDB();
+    const store = getStore(DOC_STORE, 'readonly');
+    return new Promise((resolve, reject) => {
+        const request = store.getAll();
+        request.onsuccess = () => resolve(request.result as DocumentType[]);
+        request.onerror = () => reject(request.error);
+    });
 }
 
-export const deleteDocument = async (id: string): Promise<boolean> => {
-  const db = await getDBConnection()
-
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([STORES.DOCUMENTS, STORES.VERSIONS, STORES.CHAT_HISTORY], "readwrite")
-
-    // Delete document
-    const docStore = transaction.objectStore(STORES.DOCUMENTS)
-    const docRequest = docStore.delete(id)
-
-    // Delete associated versions
-    const versionStore = transaction.objectStore(STORES.VERSIONS)
-    const versionIndex = versionStore.index("documentId")
-    const versionRequest = versionIndex.openCursor(IDBKeyRange.only(id))
-
-    versionRequest.onsuccess = (event) => {
-      const cursor = (event.target as IDBRequest).result
-      if (cursor) {
-        cursor.delete()
-        cursor.continue()
-      }
-    }
-
-    // Delete associated chat history
-    const chatStore = transaction.objectStore(STORES.CHAT_HISTORY)
-    const chatIndex = chatStore.index("documentId")
-    const chatRequest = chatIndex.openCursor(IDBKeyRange.only(id))
-
-    chatRequest.onsuccess = (event) => {
-      const cursor = (event.target as IDBRequest).result
-      if (cursor) {
-        cursor.delete()
-        cursor.continue()
-      }
-    }
-
-    transaction.oncomplete = () => {
-      db.close()
-      resolve(true)
-    }
-
-    transaction.onerror = () => reject(new Error("Failed to delete document"))
-  })
+export async function getDocument(id: string): Promise<DocumentType | null> {
+    await initializeDB();
+    const store = getStore(DOC_STORE, 'readonly');
+    return new Promise((resolve, reject) => {
+        const request = store.get(id);
+        request.onsuccess = () => resolve(request.result as DocumentType | null);
+        request.onerror = () => reject(request.error);
+    });
 }
 
-// Version operations
-export const createVersion = async (
-  documentId: string,
-  content: string,
-  description?: string,
-): Promise<VersionType> => {
-  const db = await getDBConnection()
-
-  const version: VersionType = {
-    id: uuidv4(),
-    documentId,
-    content,
-    createdAt: new Date(),
-    description,
-  }
-
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORES.VERSIONS, "readwrite")
-    const store = transaction.objectStore(STORES.VERSIONS)
-    const request = store.add(version)
-
-    request.onsuccess = () => resolve(version)
-    request.onerror = () => reject(new Error("Failed to create version"))
-
-    transaction.oncomplete = () => db.close()
-  })
+export async function updateDocument(doc: DocumentType): Promise<void> {
+    await initializeDB();
+    const store = getStore(DOC_STORE, 'readwrite');
+    return new Promise((resolve, reject) => {
+        const request = store.put(doc);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+    });
 }
 
-export const getVersions = async (documentId: string): Promise<VersionType[]> => {
-  const db = await getDBConnection()
-
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORES.VERSIONS, "readonly")
-    const store = transaction.objectStore(STORES.VERSIONS)
-    const index = store.index("documentId")
-    const request = index.openCursor(IDBKeyRange.only(documentId))
-
-    const versions: VersionType[] = []
-
-    request.onsuccess = (event) => {
-      const cursor = (event.target as IDBRequest).result
-      if (cursor) {
-        versions.push(cursor.value)
-        cursor.continue()
-      } else {
-        // Sort by createdAt descending
-        versions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        resolve(versions)
-      }
-    }
-
-    request.onerror = () => reject(new Error("Failed to get versions"))
-
-    transaction.oncomplete = () => db.close()
-  })
+// --- バージョン関連関数 ---
+export async function createVersion(documentId: string, content: string): Promise<string> {
+    await initializeDB();
+    const id = uuidv4();
+    const newVersion: VersionType = {
+        id,
+        documentId,
+        content,
+        createdAt: new Date(),
+    };
+    const store = getStore(VERSION_STORE, 'readwrite');
+    return new Promise((resolve, reject) => {
+        const request = store.add(newVersion);
+        request.onsuccess = () => resolve(id);
+        request.onerror = () => reject(request.error);
+    });
 }
 
-// Template operations
-export const getTemplates = async (): Promise<TemplateType[]> => {
-  const db = await getDBConnection()
-
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORES.TEMPLATES, "readonly")
-    const store = transaction.objectStore(STORES.TEMPLATES)
-    const request = store.getAll()
-
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(new Error("Failed to get templates"))
-
-    transaction.oncomplete = () => db.close()
-  })
+export async function getVersions(documentId: string): Promise<VersionType[]> {
+    await initializeDB();
+    const store = getStore(VERSION_STORE, 'readonly');
+    const index = store.index('documentId');
+    return new Promise((resolve, reject) => {
+        const request = index.getAll(documentId);
+        request.onsuccess = () => {
+            const sortedVersions = (request.result as VersionType[]).sort(
+                (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() // Dateオブジェクトで比較
+            );
+            resolve(sortedVersions);
+        };
+        request.onerror = () => reject(request.error);
+    });
 }
 
-export const createTemplate = async (title: string, content: string): Promise<TemplateType> => {
-  const db = await getDBConnection()
+// --- チャットメッセージ関連関数 ---
 
-  const template: TemplateType = {
-    id: uuidv4(),
-    title,
-    content,
-    createdAt: new Date(),
-  }
-
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORES.TEMPLATES, "readwrite")
-    const store = transaction.objectStore(STORES.TEMPLATES)
-    const request = store.add(template)
-
-    request.onsuccess = () => resolve(template)
-    request.onerror = () => reject(new Error("Failed to create template"))
-
-    transaction.oncomplete = () => db.close()
-  })
+/**
+ * チャットメッセージを IndexedDB に追加します。
+ */
+export async function addChatMessage(message: Omit<ChatMessageType, 'id'> & { documentId: string }): Promise<string> {
+    await initializeDB(); // DB接続確認
+    const id = uuidv4();
+    const newMessage: ChatMessageType = { ...message, id, timestamp: new Date(message.timestamp) }; // timestamp を Date オブジェクトに
+    const store = getStore(CHAT_STORE, 'readwrite');
+    return new Promise((resolve, reject) => {
+        const request = store.add(newMessage);
+        request.onsuccess = () => resolve(id);
+        request.onerror = (event) => {
+            console.error("Failed to add chat message:", request.error);
+            reject(request.error);
+        };
+    });
 }
 
-// Chat history operations
-export const saveChatMessage = async (
-  documentId: string,
-  role: "user" | "assistant",
-  content: string,
-): Promise<ChatMessageType> => {
-  const db = await getDBConnection()
+/**
+ * 指定されたドキュメントIDのチャットメッセージを IndexedDB から取得します。
+ * timestamp の昇順でソートして返します。
+ */
+export async function getChatMessages(documentId: string): Promise<ChatMessageType[]> {
+    await initializeDB(); // DB接続確認
+    const store = getStore(CHAT_STORE, 'readonly');
+    // documentId と timestamp でインデックスを検索 (インデックス名を修正)
+    const index = store.index('docId_ts');
+    // 指定した documentId の範囲を指定
+    // timestamp は Date オブジェクトで比較する必要がある
+    const range = IDBKeyRange.bound([documentId, new Date(0)], [documentId, new Date(Date.now() + 1000)]); // 未来の時刻まで含める
 
-  const message: ChatMessageType = {
-    id: uuidv4(),
-    documentId,
-    role,
-    content,
-    timestamp: new Date(),
-  }
-
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORES.CHAT_HISTORY, "readwrite")
-    const store = transaction.objectStore(STORES.CHAT_HISTORY)
-    const request = store.add(message)
-
-    request.onsuccess = () => resolve(message)
-    request.onerror = () => reject(new Error("Failed to save chat message"))
-
-    transaction.oncomplete = () => db.close()
-  })
+    return new Promise((resolve, reject) => {
+        const request = index.getAll(range);
+        request.onsuccess = () => {
+            // 結果はインデックスによりソートされているはずだが、念のためクライアントでもソート
+            const sortedMessages = (request.result as ChatMessageType[]).sort(
+                (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+            );
+            resolve(sortedMessages);
+        };
+        request.onerror = (event) => {
+            console.error("Failed to get chat messages:", request.error);
+            reject(request.error);
+        };
+    });
 }
 
-export const getChatHistory = async (documentId: string): Promise<ChatMessageType[]> => {
-  const db = await getDBConnection()
+/**
+ * 指定されたドキュメントIDのチャットメッセージをすべて IndexedDB から削除します。
+ */
+export async function clearChatMessages(documentId: string): Promise<void> {
+    await initializeDB(); // DB接続確認
+    const store = getStore(CHAT_STORE, 'readwrite');
+    // documentId のみのインデックスを使用
+    const index = store.index('documentId');
+    const range = IDBKeyRange.only(documentId);
 
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORES.CHAT_HISTORY, "readonly")
-    const store = transaction.objectStore(STORES.CHAT_HISTORY)
-    const index = store.index("documentId")
-    const request = index.openCursor(IDBKeyRange.only(documentId))
-
-    const messages: ChatMessageType[] = []
-
-    request.onsuccess = (event) => {
-      const cursor = (event.target as IDBRequest).result
-      if (cursor) {
-        messages.push(cursor.value)
-        cursor.continue()
-      } else {
-        // Sort by timestamp ascending
-        messages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-        resolve(messages)
-      }
-    }
-
-    request.onerror = () => reject(new Error("Failed to get chat history"))
-
-    transaction.oncomplete = () => db.close()
-  })
+    return new Promise((resolve, reject) => {
+        let deleteCount = 0;
+        const cursorRequest = index.openCursor(range);
+        cursorRequest.onsuccess = (event) => {
+            const cursor = (event.target as IDBRequest<IDBCursorWithValue | null>).result;
+            if (cursor) {
+                const deleteRequest = cursor.delete(); // 見つかったレコードを削除
+                deleteRequest.onsuccess = () => {
+                    deleteCount++;
+                };
+                deleteRequest.onerror = (e) => {
+                     console.error("Error deleting record:", (e.target as IDBRequest).error);
+                     // エラーが発生しても続行を試みる
+                     cursor.continue();
+                }
+                cursor.continue(); // 次のレコードへ
+            } else {
+                console.log(`Cleared ${deleteCount} chat messages for document ${documentId}`);
+                resolve(); // 削除完了
+            }
+        };
+        cursorRequest.onerror = (event) => {
+            console.error("Failed to open cursor for clearing chat messages:", cursorRequest.error);
+            reject(cursorRequest.error);
+        };
+    });
 }

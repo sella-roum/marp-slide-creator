@@ -1,16 +1,17 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { ChevronLeftIcon, ChevronRightIcon, FileIcon } from "lucide-react"
+// import { Button } from "@/components/ui/button" // Button は不要になる
+// import { ChevronLeftIcon, ChevronRightIcon, FileIcon } from "lucide-react" // Chevron アイコンは不要
+import { FileIcon } from "lucide-react" // FileIcon のみ残す
 
 interface PreviewPaneProps {
   markdown: string
 }
 
 export function PreviewPane({ markdown }: PreviewPaneProps) {
-  const [currentSlide, setCurrentSlide] = useState(0)
-  const [totalSlides, setTotalSlides] = useState(0)
+  // const [currentSlide, setCurrentSlide] = useState(0) // 削除
+  // const [totalSlides, setTotalSlides] = useState(0) // 削除
   const [renderedHTML, setRenderedHTML] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [marpInstance, setMarpInstance] = useState<any>(null)
@@ -48,7 +49,7 @@ export function PreviewPane({ markdown }: PreviewPaneProps) {
   useEffect(() => {
     if (!marpInstance || !markdown) {
       setRenderedHTML("")
-      setTotalSlides(0)
+      // setTotalSlides(0) // 削除
       return
     }
 
@@ -62,14 +63,14 @@ export function PreviewPane({ markdown }: PreviewPaneProps) {
       // Render markdown to HTML
       const { html, css } = marpInstance.render(processedMarkdown)
 
-      // Count slides
-      const slideCount = (html.match(/<section/g) || []).length
-      setTotalSlides(slideCount)
+      // Count slides (削除しても良いが、デバッグ等で役立つ可能性もあるのでコメントアウト)
+      // const slideCount = (html.match(/<section/g) || []).length
+      // setTotalSlides(slideCount)
 
-      // Ensure current slide is within bounds
-      if (currentSlide >= slideCount) {
-        setCurrentSlide(Math.max(0, slideCount - 1))
-      }
+      // Ensure current slide is within bounds (削除)
+      // if (currentSlide >= slideCount) {
+      //   setCurrentSlide(Math.max(0, slideCount - 1))
+      // }
 
       // Combine HTML and CSS
       const fullHTML = `
@@ -84,20 +85,21 @@ export function PreviewPane({ markdown }: PreviewPaneProps) {
       setError(`レンダリングエラー: ${error instanceof Error ? error.message : String(error)}`)
       setRenderedHTML("")
     }
-  }, [markdown, marpInstance, currentSlide])
+  // }, [markdown, marpInstance, currentSlide]) // currentSlide を依存配列から削除
+  }, [markdown, marpInstance])
 
-  // Navigate between slides
-  const goToNextSlide = () => {
-    if (currentSlide < totalSlides - 1) {
-      setCurrentSlide(currentSlide + 1)
-    }
-  }
-
-  const goToPrevSlide = () => {
-    if (currentSlide > 0) {
-      setCurrentSlide(currentSlide - 1)
-    }
-  }
+  // Navigate between slides (削除)
+  // const goToNextSlide = () => {
+  //   if (currentSlide < totalSlides - 1) {
+  //     setCurrentSlide(currentSlide + 1)
+  //   }
+  // }
+  //
+  // const goToPrevSlide = () => {
+  //   if (currentSlide > 0) {
+  //     setCurrentSlide(currentSlide - 1)
+  //   }
+  // }
 
   if (!markdown) {
     return (
@@ -113,6 +115,7 @@ export function PreviewPane({ markdown }: PreviewPaneProps) {
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between p-2 border-b">
         <h3 className="text-sm font-medium">プレビュー</h3>
+        {/* --- ページネーション UI 削除 ここから ---
         <div className="flex items-center space-x-2">
           <Button
             variant="outline"
@@ -132,9 +135,10 @@ export function PreviewPane({ markdown }: PreviewPaneProps) {
             <ChevronRightIcon className="h-4 w-4" />
           </Button>
         </div>
+        --- ページネーション UI 削除 ここまで --- */}
       </div>
 
-      <div className="flex-1 overflow-hidden relative">
+      <div className="flex-1 overflow-auto relative bg-gray-100 dark:bg-gray-800 p-4"> {/* overflow-hidden から overflow-auto に変更し、背景色とパディングを追加 */}
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -146,19 +150,21 @@ export function PreviewPane({ markdown }: PreviewPaneProps) {
         ) : renderedHTML ? (
           <div
             className="w-full h-full"
-            style={{
-              overflow: "hidden",
-              position: "relative",
-            }}
+            // style={{ // 削除
+            //   overflow: "hidden",
+            //   position: "relative",
+            // }}
           >
             <iframe
               srcDoc={renderedHTML}
               className="w-full h-full border-0"
-              style={{
-                transform: `translateY(${-100 * currentSlide}%)`,
-                height: `${totalSlides * 100}%`,
-              }}
+              // style={{ // 削除
+              //   transform: `translateY(${-100 * currentSlide}%)`,
+              //   height: `${totalSlides * 100}%`,
+              // }}
               title="Marp Preview"
+              // iframe の sandbox 属性を追加してセキュリティを高めることを検討
+              // sandbox="allow-scripts allow-same-origin"
             />
           </div>
         ) : (

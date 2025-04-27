@@ -115,7 +115,7 @@ ${context?.currentMarkdown || "No content yet"}
       };
 
       const response: GenerateContentResponse = await ai.models.generateContent({
-        model: 'gemini-2.0-flash-001', // モデル名 (必要なら変更)
+        model: 'gemini-2.0-flash', // モデル名 (必要なら変更)
         // systemInstruction を config に渡す (推奨)
         // または contents の最初に role: "system" で渡す (モデルによる)
         // 今回は systemInstruction を使用しない例として、contents に含める

@@ -26,9 +26,10 @@ export interface TemplateType {
 export interface ChatMessageType {
   id: string
   documentId: string
-  role: "user" | "assistant"
+  role: "user" | "assistant" | "system"
   content: string
   timestamp: Date
+  markdownCode?: string | null
 }
 
 export interface GeminiRequestType {
