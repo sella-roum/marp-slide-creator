@@ -1,12 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import React, { useState, useCallback } from "react"; // React と useCallback をインポート
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
-import { downloadFile } from "@/lib/utils" // generatePDF は不要
+import { downloadFile } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { DownloadIcon, Loader2Icon } from "lucide-react"
 import { processMarkdownForRender } from "@/lib/markdown-processor";
@@ -16,15 +16,16 @@ interface ExportDropdownProps {
   documentTitle: string
 }
 
-export function ExportDropdown({ markdown, documentTitle }: ExportDropdownProps) {
+// React.memo でラップ
+export const ExportDropdown = React.memo(({ markdown, documentTitle }: ExportDropdownProps) => {
   const { toast } = useToast()
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
-  const [exportFormat, setExportFormat] = useState<"html" | "markdown">("html"); // PDF を削除
+  const [exportFormat, setExportFormat] = useState<"html" | "markdown">("html");
   const [includeSpeakerNotes, setIncludeSpeakerNotes] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
 
-  // Handle export
-  const handleExport = async () => {
+  // Handle export (useCallback でメモ化)
+  const handleExport = useCallback(async () => {
     if (!markdown) {
         toast({ title: "エラー", description: "エクスポートするコンテンツがありません", variant: "destructive" });
         return;
@@ -44,13 +45,14 @@ export function ExportDropdown({ markdown, documentTitle }: ExportDropdownProps)
       if (exportFormat === "markdown") {
         downloadFile(processedMarkdown, `${documentTitle}.md`, "text/markdown");
         toast({ title: "成功", description: `MARKDOWNとしてエクスポートしました` });
-        setIsExportDialogOpen(false);
-        setIsExporting(false);
-        return;
+        setIsExportDialogOpen(false); // ダイアログを閉じる
+        // setIsExporting(false); // finally で実行されるため不要
+        return; // HTML処理に進まない
       }
 
       // --- HTML 処理 ---
-      const { Marp } = await import("@marp-team/marp-core");
+      // 動的インポートに変更
+      const { Marp } = await import(/* webpackChunkName: "marp-core" */ "@marp-team/marp-core");
       const marp = new Marp({ html: true, math: true, minifyCSS: false });
       const { html, css } = marp.render(processedMarkdown);
 
@@ -58,10 +60,9 @@ export function ExportDropdown({ markdown, documentTitle }: ExportDropdownProps)
         const fullHTML = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${documentTitle}</title><style>${css}</style></head><body>${html}</body></html>`;
         downloadFile(fullHTML, `${documentTitle}.html`, "text/html");
       }
-      // PDF 処理は削除済み
 
       toast({ title: "成功", description: `${exportFormat.toUpperCase()}としてエクスポートしました` });
-      setIsExportDialogOpen(false);
+      setIsExportDialogOpen(false); // ダイアログを閉じる
 
     } catch (error) {
       console.error("Export failed:", error);
@@ -73,7 +74,8 @@ export function ExportDropdown({ markdown, documentTitle }: ExportDropdownProps)
     } finally {
       setIsExporting(false);
     }
-  }
+  // 依存配列に必要な state と関数を追加
+  }, [markdown, documentTitle, exportFormat, toast]);
 
   return (
     <Dialog open={isExportDialogOpen} onOpenChange={setIsExportDialogOpen}>
@@ -85,7 +87,6 @@ export function ExportDropdown({ markdown, documentTitle }: ExportDropdownProps)
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {/* PDF メニュー項目削除済み */}
           <DialogTrigger asChild><DropdownMenuItem onSelect={() => setExportFormat("html")}>HTMLとしてエクスポート</DropdownMenuItem></DialogTrigger>
           <DialogTrigger asChild><DropdownMenuItem onSelect={() => setExportFormat("markdown")}>Markdownとしてエクスポート</DropdownMenuItem></DialogTrigger>
         </DropdownMenuContent>
@@ -101,7 +102,6 @@ export function ExportDropdown({ markdown, documentTitle }: ExportDropdownProps)
             <Label htmlFor="speaker-notes" className="text-muted-foreground">スピーカーノートを含める (未対応)</Label>
           </div>
           <p className="text-sm text-muted-foreground">
-            {/* PDF の説明削除済み */}
             {exportFormat === "html" ? "ブラウザで表示できるスタンドアロンHTMLファイルを生成します。" :
              "現在のMarkdownコンテンツをファイルとしてダウンロードします。"}
           </p>
@@ -116,4 +116,6 @@ export function ExportDropdown({ markdown, documentTitle }: ExportDropdownProps)
       </DialogContent>
     </Dialog>
   )
-}
+});
+
+ExportDropdown.displayName = 'ExportDropdown'; // displayName を設定

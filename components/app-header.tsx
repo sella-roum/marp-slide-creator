@@ -1,0 +1,87 @@
+import React from 'react';
+import { Button } from "@/components/ui/button";
+import { Toggle } from "@/components/ui/toggle";
+import { Separator } from "@/components/ui/separator";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ExportDropdown } from "@/components/export-dropdown";
+import { MessageSquareIcon, CodeIcon, EyeIcon, LayoutIcon, RowsIcon, ColumnsIcon, PanelRightIcon } from "lucide-react";
+import type { DocumentType } from "@/lib/types";
+import type { LayoutMode } from '@/lib/constants'; // LayoutMode をインポート
+
+interface AppHeaderProps {
+  currentDocument: DocumentType | null;
+  markdownContent: string;
+  layoutMode: LayoutMode;
+  setLayoutMode: (mode: LayoutMode) => void;
+  isChatVisible: boolean;
+  isEditorVisible: boolean;
+  isPreviewVisible: boolean;
+  togglePanel: (panel: 'chat' | 'editor' | 'preview') => void;
+  visiblePanelsCount: number;
+}
+
+export const AppHeader: React.FC<AppHeaderProps> = React.memo(({
+  currentDocument,
+  markdownContent,
+  layoutMode,
+  setLayoutMode,
+  isChatVisible,
+  isEditorVisible,
+  isPreviewVisible,
+  togglePanel,
+  visiblePanelsCount,
+}) => {
+  return (
+    <header className="flex items-center justify-between p-2 border-b flex-shrink-0">
+      <div className="flex items-center gap-2">
+        <h1 className="text-lg font-semibold truncate" title={currentDocument?.title}>
+          {currentDocument?.title || "読み込み中..."}
+        </h1>
+      </div>
+      <div className="flex items-center space-x-1">
+        {/* レイアウト選択ドロップダウン */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm">
+              <LayoutIcon className="h-4 w-4 mr-1" />
+              Layout
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuLabel>レイアウト選択</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuRadioGroup value={layoutMode} onValueChange={(value) => setLayoutMode(value as LayoutMode)}>
+              <DropdownMenuRadioItem value="default"><ColumnsIcon className="h-4 w-4 mr-2 opacity-50"/> デフォルト (左チャット)</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="chat-right"><PanelRightIcon className="h-4 w-4 mr-2 opacity-50"/> チャット右配置</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="horizontal"><RowsIcon className="h-4 w-4 mr-2 opacity-50"/> 横3列</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="editor-focused"><RowsIcon className="h-4 w-4 mr-2 opacity-50 rotate-90"/> エディタ重視 (縦積)</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <Separator orientation="vertical" className="h-6 mx-1" />
+
+        {/* 表示切り替えトグル */}
+        <Toggle size="sm" pressed={isChatVisible} onPressedChange={() => togglePanel('chat')} aria-label="Toggle Chat Panel" disabled={visiblePanelsCount === 1 && isChatVisible}><MessageSquareIcon className="h-4 w-4" /></Toggle>
+        <Toggle size="sm" pressed={isEditorVisible} onPressedChange={() => togglePanel('editor')} aria-label="Toggle Editor Panel" disabled={visiblePanelsCount === 1 && isEditorVisible}><CodeIcon className="h-4 w-4" /></Toggle>
+        <Toggle size="sm" pressed={isPreviewVisible} onPressedChange={() => togglePanel('preview')} aria-label="Toggle Preview Panel" disabled={visiblePanelsCount === 1 && isPreviewVisible}><EyeIcon className="h-4 w-4" /></Toggle>
+
+        <Separator orientation="vertical" className="h-6 mx-1" />
+
+        {/* エクスポートボタン */}
+        <ExportDropdown markdown={markdownContent} documentTitle={currentDocument?.title || "Untitled"} />
+      </div>
+    </header>
+  );
+});
+
+AppHeader.displayName = 'AppHeader'; // React.memo でラップした場合 displayName を設定

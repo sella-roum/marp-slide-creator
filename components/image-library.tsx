@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react'; // React をインポート
 import {
   Dialog,
   DialogContent,
@@ -17,14 +17,15 @@ import { ImagePlusIcon, TrashIcon, UploadCloudIcon, Loader2Icon, AlertCircleIcon
 import { useToast } from "@/hooks/use-toast";
 import type { ImageType } from "@/lib/types";
 import { addImage, getImages, deleteImage } from "@/lib/db";
+import { useDb } from "@/lib/db-context"; // useDb フックをインポート
 import { imageToBase64 } from "@/lib/utils";
-import Image from 'next/image'; // next/image をサムネイル表示に使用
+import Image from 'next/image';
 
 interface ImageLibraryProps {
-  onInsertReference: (reference: string) => void; // 挿入する参照文字列を渡す
+  onInsertReference: (reference: string) => void;
 }
 
-// DialogTrigger として使うための forwardRef
+// DialogTrigger として使うための forwardRef (変更なし)
 const ImageLibraryTrigger = React.forwardRef<HTMLButtonElement>((props, ref) => (
     <Button variant="ghost" size="icon" ref={ref} {...props}>
       <ImagePlusIcon className="h-4 w-4" />
@@ -34,7 +35,8 @@ const ImageLibraryTrigger = React.forwardRef<HTMLButtonElement>((props, ref) => 
 ImageLibraryTrigger.displayName = "ImageLibraryTrigger";
 
 
-export function ImageLibrary({ onInsertReference }: ImageLibraryProps) {
+// React.memo でラップ
+export const ImageLibrary = React.memo(({ onInsertReference }: ImageLibraryProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [images, setImages] = useState<ImageType[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -43,9 +45,17 @@ export function ImageLibrary({ onInsertReference }: ImageLibraryProps) {
   const [copiedStates, setCopiedStates] = useState<Record<string, boolean>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const { isDbInitialized } = useDb(); // DB初期化状態を取得
 
-  // ライブラリを開いたときに画像を読み込む
+  // ライブラリを開いたときに画像を読み込む (DB初期化チェック追加)
   const loadImages = useCallback(async () => {
+    if (!isDbInitialized) { // DB初期化チェック
+        console.log("ImageLibrary: DB not initialized, skipping image load.");
+        setError("データベースが初期化されていません。");
+        setIsLoading(false);
+        setImages([]);
+        return;
+    }
     // isOpen が true になってから少し待って実行 (Dialog のレンダリング待ち)
     await new Promise(resolve => setTimeout(resolve, 50));
 
@@ -61,22 +71,23 @@ export function ImageLibrary({ onInsertReference }: ImageLibraryProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]); // isOpen を依存配列から削除し、onOpenChange で制御
+  // isDbInitialized を依存配列に追加
+  }, [toast, isDbInitialized]);
 
-  // ダイアログの開閉状態が変わったときに画像を読み込む
-  const handleOpenChange = (open: boolean) => {
+  // ダイアログの開閉状態が変わったときに画像を読み込む (変更なし)
+  const handleOpenChange = useCallback((open: boolean) => {
       setIsOpen(open);
       if (open) {
-          loadImages(); // 開いたときに読み込み開始
-      } else {
-          // 閉じたときに state をリセットしても良い
-          // setImages([]);
-          // setError(null);
+          loadImages();
       }
-  }
+  }, [loadImages]); // loadImages を依存配列に追加
 
-  // 画像アップロード処理
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 画像アップロード処理 (DB初期化チェック追加)
+  const handleImageUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isDbInitialized) { // DB初期化チェック
+        toast({ title: "エラー", description: "データベース未初期化のためアップロードできません。", variant: "destructive" });
+        return;
+    }
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
@@ -101,10 +112,15 @@ export function ImageLibrary({ onInsertReference }: ImageLibraryProps) {
         fileInputRef.current.value = "";
       }
     }
-  };
+  // isDbInitialized, loadImages, toast を依存配列に追加
+  }, [isDbInitialized, loadImages, toast]);
 
-  // 画像削除処理
-  const handleDeleteImage = async (id: string, name: string) => {
+  // 画像削除処理 (DB初期化チェック追加)
+  const handleDeleteImage = useCallback(async (id: string, name: string) => {
+    if (!isDbInitialized) { // DB初期化チェック
+        toast({ title: "エラー", description: "データベース未初期化のため削除できません。", variant: "destructive" });
+        return;
+    }
     if (!confirm(`画像「${name}」を削除しますか？この操作は元に戻せません。`)) {
         return;
     }
@@ -116,18 +132,19 @@ export function ImageLibrary({ onInsertReference }: ImageLibraryProps) {
       console.error("Failed to delete image:", err);
       toast({ title: "エラー", description: "画像の削除に失敗しました。", variant: "destructive" });
     }
-  };
+  // isDbInitialized, toast を依存配列に追加
+  }, [isDbInitialized, toast]);
 
-  // 参照文字列を挿入
-  const handleInsertClick = (image: ImageType) => {
+  // 参照文字列を挿入 (変更なし)
+  const handleInsertClick = useCallback((image: ImageType) => {
     const reference = `![${image.name}](image://${image.id})`;
     onInsertReference(reference);
     handleOpenChange(false); // ダイアログを閉じる
     toast({ title: "画像参照を挿入しました", description: reference });
-  };
+  }, [onInsertReference, handleOpenChange, toast]); // 依存配列に onInsertReference, handleOpenChange, toast を追加
 
-   // 参照文字列をコピー
-   const handleCopyReference = (image: ImageType) => {
+   // 参照文字列をコピー (変更なし)
+   const handleCopyReference = useCallback((image: ImageType) => {
     const reference = `![${image.name}](image://${image.id})`;
     navigator.clipboard.writeText(reference).then(() => {
       setCopiedStates((prev) => ({ ...prev, [image.id]: true }));
@@ -139,7 +156,7 @@ export function ImageLibrary({ onInsertReference }: ImageLibraryProps) {
       console.error('コピー失敗:', err);
       toast({ title: "コピーに失敗しました", variant: "destructive" });
     });
-  };
+  }, [toast]); // 依存配列に toast を追加
 
 
   return (
@@ -147,8 +164,8 @@ export function ImageLibrary({ onInsertReference }: ImageLibraryProps) {
       <DialogTrigger asChild>
         <ImageLibraryTrigger />
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[80vw] md:max-w-[60vw] lg:max-w-[50vw] h-[80vh] flex flex-col p-0"> {/* パディング削除 */}
-        <DialogHeader className="p-6 pb-4 border-b"> {/* ヘッダーにパディングと境界線 */}
+      <DialogContent className="sm:max-w-[80vw] md:max-w-[60vw] lg:max-w-[50vw] h-[80vh] flex flex-col p-0">
+        <DialogHeader className="p-6 pb-4 border-b">
           <DialogTitle>画像ライブラリ</DialogTitle>
           <DialogDescription>
             アップロード済みの画像を表示・管理します。
@@ -156,8 +173,8 @@ export function ImageLibrary({ onInsertReference }: ImageLibraryProps) {
         </DialogHeader>
 
         {/* アップロードボタン */}
-        <div className="px-6 pt-4 flex-shrink-0"> {/* パディング追加 */}
-          <Button onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
+        <div className="px-6 pt-4 flex-shrink-0">
+          <Button onClick={() => fileInputRef.current?.click()} disabled={isUploading || !isDbInitialized}>
             {isUploading ? (
               <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
             ) : (
@@ -171,13 +188,13 @@ export function ImageLibrary({ onInsertReference }: ImageLibraryProps) {
             onChange={handleImageUpload}
             accept="image/*"
             className="hidden"
-            disabled={isUploading}
+            disabled={isUploading || !isDbInitialized}
           />
         </div>
 
         {/* 画像リスト */}
-        <ScrollArea className="flex-1 my-0 border-y"> {/* 上下のマージン削除、境界線追加 */}
-          <div className="p-6"> {/* リストの周りにパディング */}
+        <ScrollArea className="flex-1 my-0 border-y">
+          <div className="p-6">
             {isLoading && (
               <div className="flex justify-center items-center py-10">
                 <Loader2Icon className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -187,12 +204,12 @@ export function ImageLibrary({ onInsertReference }: ImageLibraryProps) {
               <div className="flex flex-col items-center justify-center py-10 text-destructive">
                 <AlertCircleIcon className="w-8 h-8 mb-2" />
                 <p>{error}</p>
-                <Button variant="outline" size="sm" onClick={loadImages} className="mt-4">再試行</Button>
+                {isDbInitialized && <Button variant="outline" size="sm" onClick={loadImages} className="mt-4">再試行</Button>}
               </div>
             )}
             {!isLoading && !error && images.length === 0 && (
               <div className="text-center text-muted-foreground py-10">
-                アップロードされた画像はありません。
+                {isDbInitialized ? "アップロードされた画像はありません。" : "データベース初期化中..."}
               </div>
             )}
             {!isLoading && !error && images.length > 0 && (
@@ -230,7 +247,7 @@ export function ImageLibrary({ onInsertReference }: ImageLibraryProps) {
           </div>
         </ScrollArea>
 
-        <DialogFooter className="p-6 pt-4 border-t flex-shrink-0"> {/* パディングと境界線 */}
+        <DialogFooter className="p-6 pt-4 border-t flex-shrink-0">
           <DialogClose asChild>
             <Button type="button" variant="outline">閉じる</Button>
           </DialogClose>
@@ -238,4 +255,6 @@ export function ImageLibrary({ onInsertReference }: ImageLibraryProps) {
       </DialogContent>
     </Dialog>
   );
-}
+});
+
+ImageLibrary.displayName = 'ImageLibrary'; // displayName を設定

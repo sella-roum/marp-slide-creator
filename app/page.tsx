@@ -1,12 +1,11 @@
 "use client"
 
 import React, { useEffect, useState, useCallback, useRef } from "react"
-import { Button } from "@/components/ui/button"
 import { Toaster } from "@/components/ui/toaster"
-// useToast は hooks ディレクトリからインポート
 import { useToast } from "@/hooks/use-toast"
+import { useDb } from "@/lib/db-context"; // useDb フックをインポート
 import {
-    initializeDB,
+    // initializeDB, // initializeDB は DbProvider で実行
     getDocument,
     updateDocument,
 } from "@/lib/db"
@@ -14,59 +13,40 @@ import type { DocumentType } from "@/lib/types"
 import { ChatPane } from "@/components/chat-pane"
 import { EditorPane } from "@/components/editor-pane"
 import { PreviewPane } from "@/components/preview-pane"
-// PresentationMode のインポート削除
-import { ExportDropdown } from "@/components/export-dropdown"
-// PresentationIcon, VersionHistoryPane 関連のアイコン削除
-import { MessageSquareIcon, CodeIcon, EyeIcon, LayoutIcon, RowsIcon, ColumnsIcon, PanelRightIcon } from "lucide-react"
-import { Toggle } from "@/components/ui/toggle"
+import { AppHeader } from "@/components/app-header"; // AppHeader をインポート
+import { MainLayout } from "@/components/main-layout"; // MainLayout をインポート
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable"
-import { Separator } from "@/components/ui/separator"
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuRadioGroup,
-    DropdownMenuRadioItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-
-const SINGLE_DOCUMENT_ID = "main-document";
-type LayoutMode = 'default' | 'horizontal' | 'editor-focused' | 'chat-right';
+// 定数をインポート
+import { SINGLE_DOCUMENT_ID, type LayoutMode } from '@/lib/constants';
 
 export default function Home() {
   const { toast } = useToast()
-  const [isDbInitialized, setIsDbInitialized] = useState(false)
+  const { isDbInitialized, dbError } = useDb(); // DB初期化状態とエラーを取得
   const [currentDocument, setCurrentDocument] = useState<DocumentType | null>(null)
   const [markdownContent, setMarkdownContent] = useState("")
-  // isPresentationMode state 削除
   const [isChatVisible, setIsChatVisible] = useState(true);
   const [isEditorVisible, setIsEditorVisible] = useState(true);
   const [isPreviewVisible, setIsPreviewVisible] = useState(true);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>('default');
-  // VersionHistoryPane 関連の state 削除
 
-  // DB初期化
+  // DB初期化エラーハンドリング
   useEffect(() => {
-    const initialize = async () => {
-      try {
-        await initializeDB();
-        setIsDbInitialized(true);
-      } catch (error) {
-        console.error("Failed to initialize database:", error);
-        toast({ title: "DB初期化エラー", variant: "destructive" });
-      }
-    };
-    initialize();
-  }, [toast]);
+    if (dbError) {
+      toast({
+        title: "データベースエラー",
+        description: `データベースの初期化に失敗しました: ${dbError.message}`,
+        variant: "destructive",
+      });
+    }
+  }, [dbError, toast]);
 
-  // 単一ドキュメントの読み込み/作成
+  // 単一ドキュメントの読み込み/作成 (useCallback の依存配列修正)
   const loadOrCreateSingleDocument = useCallback(async () => {
+    // isDbInitialized を DbContext から取得するため、引数から削除
     if (!isDbInitialized) return;
     try {
       console.log(`Loading document with ID: ${SINGLE_DOCUMENT_ID}`);
@@ -77,12 +57,11 @@ export default function Home() {
         const newDocData: DocumentType = {
           id: SINGLE_DOCUMENT_ID,
           title: "My Presentation",
-          // バージョン履歴削除に伴い、初期コンテンツをシンプルに
           content: "---\nmarp: true\ntheme: default\n---\n\n# Slide 1\n\n",
           createdAt: new Date(),
           updatedAt: new Date(),
         };
-        await updateDocument(newDocData); // put 操作で作成
+        await updateDocument(newDocData);
         doc = await getDocument(SINGLE_DOCUMENT_ID);
         if (doc) {
             toast({ title: "新しいプレゼンテーションを作成しました" });
@@ -92,19 +71,15 @@ export default function Home() {
       }
 
       if (doc) {
-        // currentDocument の比較ロジックを簡略化 (初回ロード or ID変更時のみ更新)
-        if (!currentDocument || doc.id !== currentDocument.id) {
-            setCurrentDocument(doc);
-            setMarkdownContent(doc.content);
-            console.log("Document loaded/updated:", doc.title);
-        } else if (doc.content !== markdownContent) {
-            // DBから読み込んだ内容が現在のstateと異なる場合（外部での変更など）は更新
-            setMarkdownContent(doc.content);
-            setCurrentDocument(doc); // currentDocumentも更新
-            console.log("Document content updated from DB.");
-        } else {
-            console.log("Document already up-to-date in state.");
-        }
+        // 外部で変更された場合のみ state を更新するように修正
+        setCurrentDocument(prevDoc => {
+            if (!prevDoc || prevDoc.id !== doc.id || prevDoc.updatedAt < doc.updatedAt) {
+                setMarkdownContent(doc.content);
+                console.log("Document loaded/updated in state:", doc.title);
+                return doc;
+            }
+            return prevDoc; // 変更なければ state を維持
+        });
       } else {
           console.error("Failed to load or create the document.");
           toast({ title: "エラー", description: "ドキュメントの読み込み/作成に失敗", variant: "destructive"});
@@ -112,10 +87,13 @@ export default function Home() {
 
     } catch (error) {
       console.error("Failed to load or create single document:", error);
-      toast({ title: "ドキュメントエラー", variant: "destructive" });
+      // DBエラーは DbContext でハンドリングするため、ここでは重複しないように注意
+      if (!(error instanceof Error && error.message.includes("Database"))) {
+          toast({ title: "ドキュメントエラー", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
+      }
     }
-  // currentDocument を依存配列から削除し、無限ループの可能性を減らす
-  }, [isDbInitialized, toast, markdownContent]);
+  // 依存配列から markdownContent を削除し、isDbInitialized を追加
+  }, [isDbInitialized, toast]);
 
   // DB初期化後にドキュメント読み込み
   useEffect(() => {
@@ -124,37 +102,26 @@ export default function Home() {
     }
   }, [isDbInitialized, loadOrCreateSingleDocument]);
 
-  // Markdown 変更ハンドラ
-  const handleMarkdownChange = (content: string) => {
+  // Markdown 変更ハンドラ (useCallback でメモ化)
+  const handleMarkdownChange = useCallback((content: string) => {
     setMarkdownContent(content);
     // currentDocument の更新は debouncedSave に任せる
-    // setCurrentDocument((prevDoc) => {
-    //     if (!prevDoc) return null;
-    //     // バージョン履歴削除に伴い、versions プロパティを削除
-    //     const { versions, ...rest } = prevDoc;
-    //     return { ...rest, content, updatedAt: new Date() };
-    // });
-  };
+  }, []); // 依存配列は空
 
-  // プレゼンテーションモード関連削除
-  // const togglePresentationMode = () => { setIsPresentationMode(!isPresentationMode); };
-
-  // カラム表示状態トグル関数
-  const togglePanel = (panel: 'chat' | 'editor' | 'preview') => {
+  // カラム表示状態トグル関数 (useCallback でメモ化)
+  const togglePanel = useCallback((panel: 'chat' | 'editor' | 'preview') => {
+    // isXxxVisible の state setter は安定しているので依存配列に含めなくて良い
     switch (panel) {
-      case 'chat': setIsChatVisible(!isChatVisible); break;
-      case 'editor': setIsEditorVisible(!isEditorVisible); break;
-      case 'preview': setIsPreviewVisible(!isPreviewVisible); break;
+      case 'chat': setIsChatVisible(prev => !prev); break;
+      case 'editor': setIsEditorVisible(prev => !prev); break;
+      case 'preview': setIsPreviewVisible(prev => !prev); break;
     }
-  };
-
-  // プレゼンテーションモードの条件分岐削除
-  // if (isPresentationMode && currentDocument) { ... }
+  }, []); // 依存配列は空
 
   const visiblePanelsCount = [isChatVisible, isEditorVisible, isPreviewVisible].filter(Boolean).length;
 
-  // 各パネルのレンダリング関数 (変更なし)
-  const renderChatPanel = () => (
+  // 各パネルのレンダリング関数 (useCallback でメモ化)
+  const renderChatPanel = useCallback(() => (
     isChatVisible && (
       <ResizablePanel
         id="chat-panel"
@@ -166,7 +133,6 @@ export default function Home() {
         className="min-w-[200px] min-h-[100px]"
       >
         <div className={`h-full flex flex-col ${layoutMode === 'chat-right' ? 'border-l' : 'border-r'}`}>
-          {/* ChatPane ヘッダーは ChatPane 内部に移動したため削除 */}
           <div className="flex-1 overflow-hidden h-full">
             <ChatPane
               currentDocument={currentDocument}
@@ -176,9 +142,10 @@ export default function Home() {
         </div>
       </ResizablePanel>
     )
-  );
+  // 依存配列に必要な state と関数を追加
+  ), [isChatVisible, layoutMode, currentDocument, handleMarkdownChange]);
 
-  const renderEditorPanel = () => (
+  const renderEditorPanel = useCallback(() => (
     isEditorVisible && (
       <ResizablePanel
         id="editor-panel"
@@ -198,9 +165,10 @@ export default function Home() {
         </div>
       </ResizablePanel>
     )
-  );
+  // 依存配列に必要な state と関数を追加
+  ), [isEditorVisible, layoutMode, markdownContent, handleMarkdownChange, currentDocument]);
 
-  const renderPreviewPanel = () => (
+  const renderPreviewPanel = useCallback(() => (
     isPreviewVisible && (
       <ResizablePanel
         id="preview-panel"
@@ -216,10 +184,11 @@ export default function Home() {
         </div>
       </ResizablePanel>
     )
-  );
+  // 依存配列に必要な state を追加
+  ), [isPreviewVisible, layoutMode, markdownContent]);
 
-  // エディタ/プレビューのグループをレンダリングする関数 (変更なし)
-  const renderEditorPreviewGroup = (direction: "vertical" | "horizontal", defaultSize: number, order: number) => (
+  // エディタ/プレビューのグループをレンダリングする関数 (useCallback でメモ化)
+  const renderEditorPreviewGroup = useCallback((direction: "vertical" | "horizontal", defaultSize: number, order: number) => (
     (isEditorVisible || isPreviewVisible) && (
         <ResizablePanel id={`editor-preview-group-${layoutMode}`} order={order} defaultSize={defaultSize} minSize={30}>
             <ResizablePanelGroup direction={direction}>
@@ -229,98 +198,48 @@ export default function Home() {
             </ResizablePanelGroup>
         </ResizablePanel>
     )
-  );
+  // 依存配列に必要な state と関数を追加
+  ), [isEditorVisible, isPreviewVisible, layoutMode, renderEditorPanel, renderPreviewPanel]);
 
-  // VersionHistoryPane のレンダリング削除
+  // DBが初期化されていない、またはエラーがある場合はローディング表示やエラー表示
+  if (!isDbInitialized || dbError) {
+    return (
+      <main className="flex flex-col h-screen items-center justify-center">
+        {dbError ? (
+          <div className="text-destructive">データベースエラー: {dbError.message}</div>
+        ) : (
+          <div>データベースを初期化中...</div>
+        )}
+      </main>
+    );
+  }
 
   return (
     <main className="flex flex-col h-screen overflow-hidden">
-      {/* Header */}
-      <header className="flex items-center justify-between p-2 border-b flex-shrink-0">
-        <div className="flex items-center gap-2">
-            {/* DocumentDropdown 削除 */}
-            <h1 className="text-lg font-semibold truncate" title={currentDocument?.title}>
-                {currentDocument?.title || "読み込み中..."}
-            </h1>
-        </div>
-        <div className="flex items-center space-x-1">
-            {/* レイアウト選択ドロップダウン (変更なし) */}
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm">
-                        <LayoutIcon className="h-4 w-4 mr-1" />
-                        Layout
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                    <DropdownMenuLabel>レイアウト選択</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuRadioGroup value={layoutMode} onValueChange={(value) => setLayoutMode(value as LayoutMode)}>
-                        <DropdownMenuRadioItem value="default"><ColumnsIcon className="h-4 w-4 mr-2 opacity-50"/> デフォルト (左チャット)</DropdownMenuRadioItem>
-                        <DropdownMenuRadioItem value="chat-right"><PanelRightIcon className="h-4 w-4 mr-2 opacity-50"/> チャット右配置</DropdownMenuRadioItem>
-                        <DropdownMenuRadioItem value="horizontal"><RowsIcon className="h-4 w-4 mr-2 opacity-50"/> 横3列</DropdownMenuRadioItem>
-                        <DropdownMenuRadioItem value="editor-focused"><RowsIcon className="h-4 w-4 mr-2 opacity-50 rotate-90"/> エディタ重視 (縦積)</DropdownMenuRadioItem>
-                    </DropdownMenuRadioGroup>
-                </DropdownMenuContent>
-            </DropdownMenu>
+      {/* ヘッダーコンポーネントを使用 */}
+      <AppHeader
+        currentDocument={currentDocument}
+        markdownContent={markdownContent}
+        layoutMode={layoutMode}
+        setLayoutMode={setLayoutMode}
+        isChatVisible={isChatVisible}
+        isEditorVisible={isEditorVisible}
+        isPreviewVisible={isPreviewVisible}
+        togglePanel={togglePanel}
+        visiblePanelsCount={visiblePanelsCount}
+      />
 
-             <Separator orientation="vertical" className="h-6 mx-1" />
-
-             {/* 表示切り替えトグル (変更なし) */}
-             <Toggle size="sm" pressed={isChatVisible} onPressedChange={() => togglePanel('chat')} aria-label="Toggle Chat Panel" disabled={visiblePanelsCount === 1 && isChatVisible}><MessageSquareIcon className="h-4 w-4" /></Toggle>
-             <Toggle size="sm" pressed={isEditorVisible} onPressedChange={() => togglePanel('editor')} aria-label="Toggle Editor Panel" disabled={visiblePanelsCount === 1 && isEditorVisible}><CodeIcon className="h-4 w-4" /></Toggle>
-             <Toggle size="sm" pressed={isPreviewVisible} onPressedChange={() => togglePanel('preview')} aria-label="Toggle Preview Panel" disabled={visiblePanelsCount === 1 && isPreviewVisible}><EyeIcon className="h-4 w-4" /></Toggle>
-             {/* Version History トグル削除 */}
-
-             <Separator orientation="vertical" className="h-6 mx-1" />
-
-          {/* エクスポートボタン (変更なし) */}
-          <ExportDropdown markdown={markdownContent} documentTitle={currentDocument?.title || "Untitled"} />
-          {/* Present ボタン削除済み */}
-        </div>
-      </header>
-
-      {/* Main Content (変更なし) */}
-      <div className="flex-1 overflow-hidden border-t">
-        {layoutMode === 'default' && (
-          <ResizablePanelGroup direction="horizontal">
-            {renderChatPanel()}
-            {isChatVisible && (isEditorVisible || isPreviewVisible) && <ResizableHandle withHandle />}
-            {renderEditorPreviewGroup("vertical", isChatVisible ? 75 : 100, 2)}
-          </ResizablePanelGroup>
-        )}
-        {layoutMode === 'chat-right' && (
-          <ResizablePanelGroup direction="horizontal">
-            {renderEditorPreviewGroup("vertical", isChatVisible ? 75 : 100, 1)}
-            {(isEditorVisible || isPreviewVisible) && isChatVisible && <ResizableHandle withHandle />}
-            {renderChatPanel()}
-          </ResizablePanelGroup>
-        )}
-        {layoutMode === 'horizontal' && (
-          <ResizablePanelGroup direction="horizontal">
-            {renderChatPanel()}
-            {isChatVisible && isEditorVisible && <ResizableHandle withHandle />}
-            {renderEditorPanel()}
-            {isEditorVisible && isPreviewVisible && <ResizableHandle withHandle />}
-            {renderPreviewPanel()}
-          </ResizablePanelGroup>
-        )}
-         {layoutMode === 'editor-focused' && (
-            <ResizablePanelGroup direction="vertical">
-                {renderEditorPanel()}
-                {isEditorVisible && (isChatVisible || isPreviewVisible) && <ResizableHandle withHandle />}
-                {(isChatVisible || isPreviewVisible) && (
-                    <ResizablePanel id="chat-preview-group-editor-focused" order={2} defaultSize={isEditorVisible ? 50 : 100} minSize={30}>
-                        <ResizablePanelGroup direction="horizontal">
-                            {renderChatPanel()}
-                            {isChatVisible && isPreviewVisible && <ResizableHandle withHandle />}
-                            {renderPreviewPanel()}
-                        </ResizablePanelGroup>
-                    </ResizablePanel>
-                )}
-            </ResizablePanelGroup>
-         )}
-      </div>
+      {/* レイアウトコンポーネントを使用 */}
+      <MainLayout
+        layoutMode={layoutMode}
+        isChatVisible={isChatVisible}
+        isEditorVisible={isEditorVisible}
+        isPreviewVisible={isPreviewVisible}
+        renderChatPanel={renderChatPanel}
+        renderEditorPanel={renderEditorPanel}
+        renderPreviewPanel={renderPreviewPanel}
+        renderEditorPreviewGroup={renderEditorPreviewGroup}
+      />
 
       <Toaster />
     </main>

@@ -1,16 +1,14 @@
 "use client"
 
-import type React from "react"
-import { useState, useEffect, useRef } from "react"
+import React, { useState, useEffect, useRef, useCallback } from 'react'; // React と useCallback をインポート
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-// VersionType のインポート削除
 import type { DocumentType } from "@/lib/types"
-// createVersion, getVersions のインポート削除
 import { updateDocument } from "@/lib/db"
 import { debounce } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
+import { useDb } from "@/lib/db-context"; // useDb フックをインポート
 import {
   LinkIcon,
   CodeIcon,
@@ -32,26 +30,47 @@ interface EditorPaneProps {
   currentDocument: DocumentType | null
 }
 
-export function EditorPane({ markdown, onChange, currentDocument }: EditorPaneProps) {
+// React.memo でラップ
+export const EditorPane = React.memo(({ markdown, onChange, currentDocument }: EditorPaneProps) => {
   const { toast } = useToast()
+  const { isDbInitialized } = useDb(); // DB初期化状態を取得
   const [isSaving, setIsSaving] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // 画像参照を挿入する関数 (変更なし)
-  const handleInsertImageReference = (reference: string) => {
-    insertTextAtCursor(reference);
-  };
+  // Insert text at cursor position (useCallback でメモ化)
+  const insertTextAtCursor = useCallback((textBefore: string, textAfter = "") => {
+    if (!textareaRef.current) return;
+    const textarea = textareaRef.current;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = textarea.value.substring(start, end);
+    const newText = textarea.value.substring(0, start) + textBefore + selectedText + textAfter + textarea.value.substring(end);
+    onChange(newText); // onChange は props なので依存配列に追加
+    // フォーカスとカーソル位置設定は setTimeout 内なのでメモ化の影響は限定的
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        const newCursorPos = start + textBefore.length + (selectedText ? selectedText.length : 0);
+        textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+      }
+    }, 0);
+  }, [onChange]); // onChange を依存配列に追加
 
-  // Save document with debounce (バージョン作成ロジック削除)
+  // 画像参照を挿入する関数 (useCallback でメモ化)
+  const handleInsertImageReference = useCallback((reference: string) => {
+    insertTextAtCursor(reference);
+  }, [insertTextAtCursor]); // insertTextAtCursor を依存配列に追加
+
+  // Save document with debounce (DB初期化チェック追加)
   const debouncedSave = useRef(
     debounce(async (documentData: DocumentType) => {
-      // バージョン取得ロジック削除
-
+      if (!isDbInitialized) { // DB初期化チェック
+        console.warn("EditorPane: DB not initialized, skipping save.");
+        return;
+      }
       try {
         setIsSaving(true);
-        // versions プロパティを除外する処理を削除
         await updateDocument(documentData);
-        // バージョン作成ロジック削除
       } catch (error) {
         console.error("Failed to save document:", error);
         toast({ title: "エラー", description: "ドキュメント保存失敗", variant: "destructive" });
@@ -61,37 +80,23 @@ export function EditorPane({ markdown, onChange, currentDocument }: EditorPanePr
     }, 1000)
   ).current;
 
-  // Save document when content changes (変更なし)
+  // Save document when content changes (DB初期化チェック追加)
   useEffect(() => {
-    if (currentDocument && markdown !== currentDocument.content) {
+    // DBが初期化されてから保存処理を行う
+    if (isDbInitialized && currentDocument && markdown !== currentDocument.content) {
       const docToSave: DocumentType = {
         ...currentDocument,
         content: markdown,
         updatedAt: new Date(),
-        // versions プロパティは DocumentType にないので不要
       };
       debouncedSave(docToSave);
     }
-  }, [markdown, currentDocument, debouncedSave]);
+  // isDbInitialized を依存配列に追加
+  }, [markdown, currentDocument, debouncedSave, isDbInitialized]);
 
-  // Insert text at cursor position (変更なし)
-  const insertTextAtCursor = (textBefore: string, textAfter = "") => {
-    if (!textareaRef.current) return;
-    const textarea = textareaRef.current;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selectedText = textarea.value.substring(start, end);
-    const newText = textarea.value.substring(0, start) + textBefore + selectedText + textAfter + textarea.value.substring(end);
-    onChange(newText);
-    setTimeout(() => {
-      textarea.focus();
-      const newCursorPos = start + textBefore.length + (selectedText ? selectedText.length : 0);
-      textarea.setSelectionRange(newCursorPos, newCursorPos);
-    }, 0);
-  };
 
-  // Handle toolbar actions (変更なし)
-  const handleToolbarAction = (action: string) => {
+  // Handle toolbar actions (useCallback でメモ化)
+  const handleToolbarAction = useCallback((action: string) => {
     switch (action) {
       case "h1": insertTextAtCursor("# "); break;
       case "h2": insertTextAtCursor("## "); break;
@@ -109,14 +114,14 @@ export function EditorPane({ markdown, onChange, currentDocument }: EditorPanePr
         break;
       default: break;
     }
-  };
+  }, [insertTextAtCursor]); // insertTextAtCursor を依存配列に追加
 
-  // Render (変更なし)
+  // Render
   if (!currentDocument) {
     return (
       <div className="flex flex-col items-center justify-center h-full p-4 text-center text-muted-foreground">
         <FileIcon className="h-12 w-12 mb-4 opacity-50" />
-        <p>ドキュメントを読み込み中...</p> {/* メッセージ変更 */}
+        <p>ドキュメントを読み込み中...</p>
       </div>
     );
   }
@@ -132,7 +137,7 @@ export function EditorPane({ markdown, onChange, currentDocument }: EditorPanePr
 
       <div className="flex items-center p-1 border-b overflow-x-auto">
         <TooltipProvider>
-          {/* ツールバーボタン (変更なし) */}
+          {/* ツールバーボタン */}
           <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => handleToolbarAction("h1")}><Heading1Icon className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>見出し1</TooltipContent></Tooltip>
           <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => handleToolbarAction("h2")}><Heading2Icon className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>見出し2</TooltipContent></Tooltip>
           <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => handleToolbarAction("bold")}><BoldIcon className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>太字</TooltipContent></Tooltip>
@@ -156,10 +161,13 @@ export function EditorPane({ markdown, onChange, currentDocument }: EditorPanePr
       <Textarea
         ref={textareaRef}
         value={markdown}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => onChange(e.target.value)} // onChange は props なので直接渡す
         className="flex-1 resize-none font-mono text-sm p-4 rounded-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
         placeholder="Marpプレゼンテーションを作成するには、ここに入力を始めてください..."
+        disabled={!isDbInitialized} // DB初期化中は無効化
       />
     </div>
   );
-}
+});
+
+EditorPane.displayName = 'EditorPane'; // displayName を設定
