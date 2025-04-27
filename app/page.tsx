@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Toaster } from "@/components/ui/toaster"
+// useToast は hooks ディレクトリからインポート
 import { useToast } from "@/hooks/use-toast"
 import {
     initializeDB,
@@ -13,9 +14,10 @@ import type { DocumentType } from "@/lib/types"
 import { ChatPane } from "@/components/chat-pane"
 import { EditorPane } from "@/components/editor-pane"
 import { PreviewPane } from "@/components/preview-pane"
-// import { PresentationMode } from "@/components/presentation-mode" // 削除
+// PresentationMode のインポート削除
 import { ExportDropdown } from "@/components/export-dropdown"
-import { MessageSquareIcon, CodeIcon, EyeIcon, /* PresentationIcon, */ LayoutIcon, RowsIcon, ColumnsIcon, PanelRightIcon } from "lucide-react" // PresentationIcon を削除
+// PresentationIcon, VersionHistoryPane 関連のアイコン削除
+import { MessageSquareIcon, CodeIcon, EyeIcon, LayoutIcon, RowsIcon, ColumnsIcon, PanelRightIcon } from "lucide-react"
 import { Toggle } from "@/components/ui/toggle"
 import {
   ResizableHandle,
@@ -42,11 +44,12 @@ export default function Home() {
   const [isDbInitialized, setIsDbInitialized] = useState(false)
   const [currentDocument, setCurrentDocument] = useState<DocumentType | null>(null)
   const [markdownContent, setMarkdownContent] = useState("")
-  // const [isPresentationMode, setIsPresentationMode] = useState(false) // 削除
+  // isPresentationMode state 削除
   const [isChatVisible, setIsChatVisible] = useState(true);
   const [isEditorVisible, setIsEditorVisible] = useState(true);
   const [isPreviewVisible, setIsPreviewVisible] = useState(true);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>('default');
+  // VersionHistoryPane 関連の state 削除
 
   // DB初期化
   useEffect(() => {
@@ -74,6 +77,7 @@ export default function Home() {
         const newDocData: DocumentType = {
           id: SINGLE_DOCUMENT_ID,
           title: "My Presentation",
+          // バージョン履歴削除に伴い、初期コンテンツをシンプルに
           content: "---\nmarp: true\ntheme: default\n---\n\n# Slide 1\n\n",
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -88,10 +92,16 @@ export default function Home() {
       }
 
       if (doc) {
-        if (!currentDocument || doc.content !== currentDocument.content || doc.title !== currentDocument.title) {
+        // currentDocument の比較ロジックを簡略化 (初回ロード or ID変更時のみ更新)
+        if (!currentDocument || doc.id !== currentDocument.id) {
             setCurrentDocument(doc);
             setMarkdownContent(doc.content);
             console.log("Document loaded/updated:", doc.title);
+        } else if (doc.content !== markdownContent) {
+            // DBから読み込んだ内容が現在のstateと異なる場合（外部での変更など）は更新
+            setMarkdownContent(doc.content);
+            setCurrentDocument(doc); // currentDocumentも更新
+            console.log("Document content updated from DB.");
         } else {
             console.log("Document already up-to-date in state.");
         }
@@ -104,7 +114,8 @@ export default function Home() {
       console.error("Failed to load or create single document:", error);
       toast({ title: "ドキュメントエラー", variant: "destructive" });
     }
-  }, [isDbInitialized, toast, currentDocument]);
+  // currentDocument を依存配列から削除し、無限ループの可能性を減らす
+  }, [isDbInitialized, toast, markdownContent]);
 
   // DB初期化後にドキュメント読み込み
   useEffect(() => {
@@ -116,10 +127,13 @@ export default function Home() {
   // Markdown 変更ハンドラ
   const handleMarkdownChange = (content: string) => {
     setMarkdownContent(content);
-    setCurrentDocument((prevDoc) => {
-        if (!prevDoc) return null;
-        return { ...prevDoc, content, updatedAt: new Date() };
-    });
+    // currentDocument の更新は debouncedSave に任せる
+    // setCurrentDocument((prevDoc) => {
+    //     if (!prevDoc) return null;
+    //     // バージョン履歴削除に伴い、versions プロパティを削除
+    //     const { versions, ...rest } = prevDoc;
+    //     return { ...rest, content, updatedAt: new Date() };
+    // });
   };
 
   // プレゼンテーションモード関連削除
@@ -135,13 +149,11 @@ export default function Home() {
   };
 
   // プレゼンテーションモードの条件分岐削除
-  // if (isPresentationMode && currentDocument) {
-  //   return <PresentationMode markdown={markdownContent} onExit={togglePresentationMode} />;
-  // }
+  // if (isPresentationMode && currentDocument) { ... }
 
   const visiblePanelsCount = [isChatVisible, isEditorVisible, isPreviewVisible].filter(Boolean).length;
 
-  // 各パネルのレンダリング関数
+  // 各パネルのレンダリング関数 (変更なし)
   const renderChatPanel = () => (
     isChatVisible && (
       <ResizablePanel
@@ -154,10 +166,7 @@ export default function Home() {
         className="min-w-[200px] min-h-[100px]"
       >
         <div className={`h-full flex flex-col ${layoutMode === 'chat-right' ? 'border-l' : 'border-r'}`}>
-          <div className="flex items-center p-3 border-b bg-muted flex-shrink-0">
-            <MessageSquareIcon className="h-4 w-4 mr-2" />
-            <h3 className="text-sm font-medium">AI Chat</h3>
-          </div>
+          {/* ChatPane ヘッダーは ChatPane 内部に移動したため削除 */}
           <div className="flex-1 overflow-hidden h-full">
             <ChatPane
               currentDocument={currentDocument}
@@ -209,7 +218,7 @@ export default function Home() {
     )
   );
 
-  // エディタ/プレビューのグループをレンダリングする関数
+  // エディタ/プレビューのグループをレンダリングする関数 (変更なし)
   const renderEditorPreviewGroup = (direction: "vertical" | "horizontal", defaultSize: number, order: number) => (
     (isEditorVisible || isPreviewVisible) && (
         <ResizablePanel id={`editor-preview-group-${layoutMode}`} order={order} defaultSize={defaultSize} minSize={30}>
@@ -222,18 +231,20 @@ export default function Home() {
     )
   );
 
+  // VersionHistoryPane のレンダリング削除
 
   return (
     <main className="flex flex-col h-screen overflow-hidden">
       {/* Header */}
       <header className="flex items-center justify-between p-2 border-b flex-shrink-0">
         <div className="flex items-center gap-2">
+            {/* DocumentDropdown 削除 */}
             <h1 className="text-lg font-semibold truncate" title={currentDocument?.title}>
                 {currentDocument?.title || "読み込み中..."}
             </h1>
         </div>
         <div className="flex items-center space-x-1">
-            {/* レイアウト選択ドロップダウン */}
+            {/* レイアウト選択ドロップダウン (変更なし) */}
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm">
@@ -255,20 +266,21 @@ export default function Home() {
 
              <Separator orientation="vertical" className="h-6 mx-1" />
 
-             {/* 表示切り替えトグル */}
+             {/* 表示切り替えトグル (変更なし) */}
              <Toggle size="sm" pressed={isChatVisible} onPressedChange={() => togglePanel('chat')} aria-label="Toggle Chat Panel" disabled={visiblePanelsCount === 1 && isChatVisible}><MessageSquareIcon className="h-4 w-4" /></Toggle>
              <Toggle size="sm" pressed={isEditorVisible} onPressedChange={() => togglePanel('editor')} aria-label="Toggle Editor Panel" disabled={visiblePanelsCount === 1 && isEditorVisible}><CodeIcon className="h-4 w-4" /></Toggle>
              <Toggle size="sm" pressed={isPreviewVisible} onPressedChange={() => togglePanel('preview')} aria-label="Toggle Preview Panel" disabled={visiblePanelsCount === 1 && isPreviewVisible}><EyeIcon className="h-4 w-4" /></Toggle>
+             {/* Version History トグル削除 */}
 
              <Separator orientation="vertical" className="h-6 mx-1" />
 
-          {/* エクスポートボタン */}
+          {/* エクスポートボタン (変更なし) */}
           <ExportDropdown markdown={markdownContent} documentTitle={currentDocument?.title || "Untitled"} />
           {/* Present ボタン削除済み */}
         </div>
       </header>
 
-      {/* Main Content */}
+      {/* Main Content (変更なし) */}
       <div className="flex-1 overflow-hidden border-t">
         {layoutMode === 'default' && (
           <ResizablePanelGroup direction="horizontal">

@@ -1,27 +1,18 @@
+// VersionType と TemplateType を削除
 export interface DocumentType {
   id: string
   title: string
   content: string
   createdAt: Date
   updatedAt: Date
-  versions?: VersionType[]
+  // versions プロパティ削除
 }
 
-export interface VersionType {
-  id: string
-  documentId: string
-  content: string
-  createdAt: Date
-  description?: string
-}
+// VersionType 削除
+// export interface VersionType { ... }
 
-export interface TemplateType {
-  id: string
-  title: string
-  content: string
-  createdAt: Date
-  isBuiltIn?: boolean
-}
+// TemplateType 削除
+// export interface TemplateType { ... }
 
 export interface ChatMessageType {
   id: string
@@ -32,15 +23,12 @@ export interface ChatMessageType {
   markdownCode?: string | null
 }
 
-// --- ▼▼▼ 画像タイプを追加 ▼▼▼ ---
 export interface ImageType {
-  id: string;          // 一意なID (UUID)
-  name: string;        // ファイル名
-  dataUrl: string;     // Base64データURL
-  createdAt: Date;     // アップロード日時
-  // documentId?: string; // オプション: ドキュメントに関連付ける場合
+  id: string;
+  name: string;
+  dataUrl: string;
+  createdAt: Date;
 }
-// --- ▲▲▲ 画像タイプを追加 ▲▲▲ ---
 
 export interface GeminiRequestType {
   prompt: string

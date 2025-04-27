@@ -1,21 +1,21 @@
-import type { DocumentType, VersionType, ChatMessageType, ImageType } from './types'; // ImageType をインポート
+import type { DocumentType, ChatMessageType, ImageType } from './types';
 import { v4 as uuidv4 } from 'uuid';
 
 const DB_NAME = 'MarpSlideCreatorDB';
-const DB_VERSION = 3; // 画像ストア追加のためバージョンアップ
+// DBバージョンは変更しない (ストア削除ではないため)
+const DB_VERSION = 3;
 const DOC_STORE = 'documents';
-const VERSION_STORE = 'versions';
+// VERSION_STORE の定義削除
+// const VERSION_STORE = 'versions';
 const CHAT_STORE = 'chatMessages';
-const IMAGE_STORE = 'images'; // 画像ストア名
+const IMAGE_STORE = 'images';
 
 let db: IDBDatabase | null = null;
 
-// --- DB初期化関数 (修正) ---
+// --- DB初期化関数 (onupgradeneeded から versions ストア関連を削除) ---
 export function initializeDB(): Promise<void> {
   return new Promise((resolve, reject) => {
-    // すでに接続が確立しているか、接続試行中の場合は解決
     if (db) {
-      // console.log("Database connection already established or in progress.");
       resolve();
       return;
     }
@@ -41,7 +41,7 @@ export function initializeDB(): Promise<void> {
       const target = event.target as IDBOpenDBRequest | null;
       if (!target) return;
       const currentDb = target.result;
-      const transaction = target.transaction; // アップグレードトランザクションを取得
+      const transaction = target.transaction;
 
       if (!transaction) {
           console.error("Upgrade transaction is null!");
@@ -50,19 +50,15 @@ export function initializeDB(): Promise<void> {
 
       console.log(`Upgrading from version ${event.oldVersion} to ${event.newVersion}`);
 
-      // 既存ストア作成
+      // documents ストア作成
       if (!currentDb.objectStoreNames.contains(DOC_STORE)) {
         currentDb.createObjectStore(DOC_STORE, { keyPath: 'id' });
         console.log(`Object store "${DOC_STORE}" created.`);
       }
-      if (!currentDb.objectStoreNames.contains(VERSION_STORE)) {
-        const versionStore = currentDb.createObjectStore(VERSION_STORE, { keyPath: 'id' });
-        if (!versionStore.indexNames.contains('documentId')) {
-             versionStore.createIndex('documentId', 'documentId', { unique: false });
-             console.log(`Index "documentId" created for store "${VERSION_STORE}".`);
-        }
-        console.log(`Object store "${VERSION_STORE}" created.`);
-      }
+      // versions ストア作成ロジック削除
+      // if (!currentDb.objectStoreNames.contains(VERSION_STORE)) { ... }
+
+      // chatMessages ストア作成
       if (!currentDb.objectStoreNames.contains(CHAT_STORE)) {
         const chatStore = currentDb.createObjectStore(CHAT_STORE, { keyPath: 'id' });
         if (!chatStore.indexNames.contains('docId_ts')) {
@@ -76,19 +72,16 @@ export function initializeDB(): Promise<void> {
         console.log(`Object store "${CHAT_STORE}" created.`);
       }
 
-      // --- ▼▼▼ 画像ストア作成 ▼▼▼ ---
+      // images ストア作成
       if (!currentDb.objectStoreNames.contains(IMAGE_STORE)) {
         const imageStore = currentDb.createObjectStore(IMAGE_STORE, { keyPath: 'id' });
-        // createdAt インデックスを追加
         if (!imageStore.indexNames.contains('createdAt')) {
             imageStore.createIndex('createdAt', 'createdAt', { unique: false });
             console.log(`Index "createdAt" created for store "${IMAGE_STORE}".`);
         }
         console.log(`Object store "${IMAGE_STORE}" created.`);
       }
-      // --- ▲▲▲ 画像ストア作成 ▲▲▲ ---
 
-      // アップグレードトランザクションの完了を待つ (必須ではないが、ログのため)
       transaction.oncomplete = () => {
           console.log("Database upgrade transaction complete.");
       };
@@ -99,21 +92,15 @@ export function initializeDB(): Promise<void> {
 
     request.onblocked = () => {
         console.warn("Database upgrade blocked. Please close other tabs using this application.");
-        // ここでユーザーに通知を出すなどの処理を追加しても良い
         reject(new Error("Database upgrade blocked"));
     };
   });
 }
 
-// --- ヘルパー関数: トランザクション取得 ---
+// --- ヘルパー関数: トランザクション取得 (変更なし) ---
 function getStore(storeName: string, mode: IDBTransactionMode): IDBObjectStore {
     if (!db) {
         console.error("Attempted to get store, but database is not initialized.");
-        // ここで再初期化を試みるか、エラーを投げる
-        // throw new Error("Database not initialized");
-        // 再初期化を試みる場合 (非同期なので注意が必要):
-        // initializeDB().then(() => getStore(storeName, mode)).catch(e => { throw e; });
-        // シンプルにエラーを投げる方が安全な場合が多い
         throw new Error("Database not initialized");
     }
     try {
@@ -123,47 +110,18 @@ function getStore(storeName: string, mode: IDBTransactionMode): IDBObjectStore {
         return transaction.objectStore(storeName);
     } catch (e) {
         console.error(`Failed to start transaction on ${storeName}:`, e);
-        // DB接続が失われている可能性を考慮
         if (e instanceof DOMException && e.name === 'InvalidStateError') {
             console.warn("Database connection might be closed. Attempting to re-initialize...");
-            db = null; // 接続をリセット
-            // 再度 initializeDB を呼ぶか、ユーザーにリロードを促す
-            // initializeDB().catch(console.error);
+            db = null;
         }
         throw e;
     }
 }
 
 // --- ドキュメント関連関数 ---
-export async function addDocument(doc: Omit<DocumentType, 'id' | 'versions'>): Promise<string> {
-    await initializeDB();
-    const id = uuidv4();
-    const newDoc = { ...doc, id, createdAt: new Date(doc.createdAt), updatedAt: new Date(doc.updatedAt) };
-    const store = getStore(DOC_STORE, 'readwrite');
-    return new Promise((resolve, reject) => {
-        const request = store.add(newDoc);
-        request.onsuccess = () => resolve(id);
-        request.onerror = () => reject(request.error);
-    });
-}
+// addDocument, getDocuments, renameDocument, deleteDocument 削除
 
-export async function getDocuments(): Promise<DocumentType[]> {
-    await initializeDB();
-    const store = getStore(DOC_STORE, 'readonly');
-    return new Promise((resolve, reject) => {
-        const request = store.getAll();
-        request.onsuccess = () => {
-            const docs = (request.result as any[]).map(doc => ({
-                ...doc,
-                createdAt: new Date(doc.createdAt),
-                updatedAt: new Date(doc.updatedAt),
-            }));
-            resolve(docs as DocumentType[]);
-        }
-        request.onerror = () => reject(request.error);
-    });
-}
-
+// getDocument (versions プロパティを除外するように修正)
 export async function getDocument(id: string): Promise<DocumentType | null> {
     await initializeDB();
     const store = getStore(DOC_STORE, 'readonly');
@@ -172,8 +130,10 @@ export async function getDocument(id: string): Promise<DocumentType | null> {
         request.onsuccess = () => {
             const doc = request.result;
             if (doc) {
+                // versions プロパティが存在する場合に備えて除外 (古いデータ形式への互換性)
+                const { versions, ...rest } = doc;
                 resolve({
-                    ...doc,
+                    ...rest,
                     createdAt: new Date(doc.createdAt),
                     updatedAt: new Date(doc.updatedAt),
                 } as DocumentType);
@@ -185,8 +145,10 @@ export async function getDocument(id: string): Promise<DocumentType | null> {
     });
 }
 
+// updateDocument (versions プロパティを除外する処理を削除)
 export async function updateDocument(doc: DocumentType): Promise<void> {
     await initializeDB();
+    // versions プロパティを除外する処理を削除
     const docToUpdate = { ...doc, createdAt: new Date(doc.createdAt), updatedAt: new Date(doc.updatedAt) };
     const store = getStore(DOC_STORE, 'readwrite');
     return new Promise((resolve, reject) => {
@@ -196,40 +158,26 @@ export async function updateDocument(doc: DocumentType): Promise<void> {
     });
 }
 
-export async function renameDocument(id: string, newTitle: string): Promise<void> {
-    const doc = await getDocument(id);
-    if (!doc) throw new Error(`Document with id ${id} not found.`);
-    const updatedDoc = { ...doc, title: newTitle, updatedAt: new Date() };
-    await updateDocument(updatedDoc);
-}
-
-export async function deleteDocument(documentId: string): Promise<void> {
+// deleteDocumentAndRelatedData (変更なし)
+export async function deleteDocumentAndRelatedData(documentId: string): Promise<void> {
     await initializeDB();
     if (!db) throw new Error("Database not initialized");
 
     return new Promise((resolve, reject) => {
-        const transaction = db!.transaction([DOC_STORE, VERSION_STORE, CHAT_STORE], 'readwrite');
+        // versions ストアを除外
+        const transaction = db!.transaction([DOC_STORE, CHAT_STORE], 'readwrite');
         const docStore = transaction.objectStore(DOC_STORE);
-        const versionStore = transaction.objectStore(VERSION_STORE);
+        // const versionStore = transaction.objectStore(VERSION_STORE); // 削除
         const chatStore = transaction.objectStore(CHAT_STORE);
 
         // 1. ドキュメント本体を削除
         const docDeleteReq = docStore.delete(documentId);
         docDeleteReq.onerror = () => console.error("Error deleting document:", docDeleteReq.error);
 
-        // 2. 関連するバージョンを削除
-        const versionIndex = versionStore.index('documentId');
-        const versionCursorReq = versionIndex.openKeyCursor(IDBKeyRange.only(documentId));
-        versionCursorReq.onsuccess = (event) => {
-            const cursor = (event.target as IDBRequest<IDBCursor | null>).result;
-            if (cursor) {
-                versionStore.delete(cursor.primaryKey).onerror = (e) => console.error("Error deleting version:", (e.target as IDBRequest).error);
-                cursor.continue();
-            }
-        };
-        versionCursorReq.onerror = () => console.error("Error opening version cursor:", versionCursorReq.error);
+        // 2. 関連するバージョンを削除 (削除)
+        // const versionIndex = versionStore.index('documentId'); ...
 
-        // 3. 関連するチャットメッセージを削除
+        // 3. 関連するチャットメッセージを削除 (変更なし)
         const chatIndex = chatStore.index('documentId');
         const chatCursorReq = chatIndex.openKeyCursor(IDBKeyRange.only(documentId));
         chatCursorReq.onsuccess = (event) => {
@@ -242,11 +190,11 @@ export async function deleteDocument(documentId: string): Promise<void> {
         chatCursorReq.onerror = () => console.error("Error opening chat cursor:", chatCursorReq.error);
 
         transaction.oncomplete = () => {
-            console.log(`Document ${documentId} and related data deleted successfully.`);
+            console.log(`Document ${documentId} and related chat data deleted successfully.`);
             resolve();
         };
         transaction.onerror = (event) => {
-            console.error("Error deleting document and related data:", transaction.error);
+            console.error("Error deleting document and related chat data:", transaction.error);
             reject(transaction.error);
         };
         transaction.onabort = (event) => {
@@ -257,38 +205,12 @@ export async function deleteDocument(documentId: string): Promise<void> {
 }
 
 
-// --- バージョン関連関数 ---
-export async function createVersion(documentId: string, content: string): Promise<string> {
-    await initializeDB();
-    const id = uuidv4();
-    const newVersion: VersionType = { id, documentId, content, createdAt: new Date() };
-    const store = getStore(VERSION_STORE, 'readwrite');
-    return new Promise((resolve, reject) => {
-        const request = store.add(newVersion);
-        request.onsuccess = () => resolve(id);
-        request.onerror = () => reject(request.error);
-    });
-}
-
-export async function getVersions(documentId: string): Promise<VersionType[]> {
-    await initializeDB();
-    const store = getStore(VERSION_STORE, 'readonly');
-    const index = store.index('documentId');
-    return new Promise((resolve, reject) => {
-        const request = index.getAll(documentId);
-        request.onsuccess = () => {
-            const sortedVersions = (request.result as any[]).map(v => ({
-                ...v,
-                createdAt: new Date(v.createdAt)
-            })).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-            resolve(sortedVersions as VersionType[]);
-        };
-        request.onerror = () => reject(request.error);
-    });
-}
+// --- バージョン関連関数 (削除) ---
+// export async function createVersion(...) { ... }
+// export async function getVersions(...) { ... }
 
 
-// --- チャットメッセージ関連関数 ---
+// --- チャットメッセージ関連関数 (変更なし) ---
 export async function addChatMessage(message: Omit<ChatMessageType, 'id'> & { documentId: string }): Promise<string> {
     await initializeDB();
     const id = uuidv4();
@@ -343,7 +265,7 @@ export async function clearChatMessages(documentId: string): Promise<void> {
     });
 }
 
-// --- 画像関連関数 ---
+// --- 画像関連関数 (変更なし) ---
 export async function addImage(imageData: Omit<ImageType, 'id' | 'createdAt'>): Promise<string> {
     await initializeDB();
     const id = uuidv4();
