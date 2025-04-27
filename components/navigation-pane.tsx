@@ -17,10 +17,9 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import type { DocumentType, TemplateType } from "@/lib/types"
-import { createDocument, deleteDocument, getTemplates, createTemplate, updateDocument, deleteTemplate } from "@/lib/db"
+import { createDocument, deleteDocument, getTemplates, createTemplate } from "@/lib/db"
 import { useToast } from "@/hooks/use-toast"
-import { PlusIcon, TrashIcon, SaveIcon, FolderIcon, EditIcon, MoreHorizontalIcon } from "lucide-react"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { PlusIcon, TrashIcon, SaveIcon, FolderIcon } from "lucide-react"
 
 interface NavigationPaneProps {
   documents: DocumentType[]
@@ -43,12 +42,8 @@ export function NavigationPane({
   const [templates, setTemplates] = useState<TemplateType[]>([])
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false)
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [editingDocId, setEditingDocId] = useState<string | null>(null)
-  const [editingDocTitle, setEditingDocTitle] = useState("")
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
   const [isTemplatesLoaded, setIsTemplatesLoaded] = useState(false)
-  const [isTemplateManagementOpen, setIsTemplateManagementOpen] = useState(false)
 
   // Load templates
   const loadTemplates = async () => {
@@ -104,45 +99,6 @@ export function NavigationPane({
       toast({
         title: "エラー",
         description: "ドキュメントの作成に失敗しました",
-        variant: "destructive",
-      })
-    }
-  }
-
-  // Edit document title
-  const handleEditDocument = async () => {
-    if (!isDbInitialized || !editingDocId) return
-
-    try {
-      const docToEdit = documents.find((doc) => doc.id === editingDocId)
-      if (!docToEdit) return
-
-      const updatedDoc = {
-        ...docToEdit,
-        title: editingDocTitle,
-      }
-
-      await updateDocument(updatedDoc)
-      await onDocumentsChange()
-
-      // If the edited document is the current one, update it
-      if (currentDocument && currentDocument.id === editingDocId) {
-        onDocumentChange(updatedDoc)
-      }
-
-      toast({
-        title: "成功",
-        description: "ドキュメントを更新しました",
-      })
-
-      setIsEditDialogOpen(false)
-      setEditingDocId(null)
-      setEditingDocTitle("")
-    } catch (error) {
-      console.error("Failed to update document:", error)
-      toast({
-        title: "エラー",
-        description: "ドキュメントの更新に失敗しました",
         variant: "destructive",
       })
     }
@@ -211,36 +167,6 @@ export function NavigationPane({
         variant: "destructive",
       })
     }
-  }
-
-  // Delete template
-  const handleDeleteTemplate = async (id: string) => {
-    if (!isDbInitialized) return
-
-    try {
-      await deleteTemplate(id)
-      const loadedTemplates = await getTemplates()
-      setTemplates(loadedTemplates)
-
-      toast({
-        title: "成功",
-        description: "テンプレートを削除しました",
-      })
-    } catch (error) {
-      console.error("Failed to delete template:", error)
-      toast({
-        title: "エラー",
-        description: "テンプレートの削除に失敗しました",
-        variant: "destructive",
-      })
-    }
-  }
-
-  // Open edit dialog
-  const openEditDialog = (doc: DocumentType) => {
-    setEditingDocId(doc.id)
-    setEditingDocTitle(doc.title)
-    setIsEditDialogOpen(true)
   }
 
   if (!isDbInitialized) {
@@ -336,17 +262,6 @@ export function NavigationPane({
               </DialogFooter>
             </DialogContent>
           </Dialog>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" title="テンプレート管理">
-                <MoreHorizontalIcon className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => setIsTemplateManagementOpen(true)}>テンプレート管理</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </div>
 
@@ -371,150 +286,37 @@ export function NavigationPane({
                 onClick={() => onDocumentChange(doc)}
               >
                 <div className="truncate">{doc.title}</div>
-                <div className="flex">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      openEditDialog(doc)
-                    }}
-                  >
-                    <EditIcon className="h-4 w-4" />
-                  </Button>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="ghost" size="icon" onClick={(e) => e.stopPropagation()}>
-                        <TrashIcon className="h-4 w-4" />
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>ドキュメントの削除</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          "{doc.title}"を削除してもよろしいですか？この操作は元に戻せません。
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>キャンセル</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDeleteDocument(doc.id)
-                          }}
-                        >
-                          削除
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </div>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="ghost" size="icon" onClick={(e) => e.stopPropagation()}>
+                      <TrashIcon className="h-4 w-4" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>ドキュメントの削除</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        "{doc.title}"を削除してもよろしいですか？この操作は元に戻せません。
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>キャンセル</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteDocument(doc.id)
+                        }}
+                      >
+                        削除
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             ))
           )}
         </div>
       </ScrollArea>
-
-      {/* Edit Document Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>ドキュメントの編集</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label htmlFor="editTitle" className="text-sm font-medium">
-                タイトル
-              </label>
-              <Input id="editTitle" value={editingDocTitle} onChange={(e) => setEditingDocTitle(e.target.value)} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-              キャンセル
-            </Button>
-            <Button onClick={handleEditDocument}>更新</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Template Management Dialog */}
-      <Dialog
-        open={isTemplateManagementOpen}
-        onOpenChange={(open) => {
-          setIsTemplateManagementOpen(open)
-          if (open) loadTemplates()
-        }}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>テンプレート管理</DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            <ScrollArea className="h-[300px] pr-4">
-              {templates.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <p>テンプレートがありません</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {templates.map((template) => (
-                    <div key={template.id} className="flex items-center justify-between p-2 border rounded-md">
-                      <div className="truncate flex-1">
-                        <p className="font-medium">{template.title}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(template.createdAt).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <div className="flex">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            // Create new document from template
-                            handleCreateDocument(template.id)
-                            setIsTemplateManagementOpen(false)
-                          }}
-                          disabled={template.isBuiltIn}
-                          title="このテンプレートから作成"
-                        >
-                          <PlusIcon className="h-4 w-4" />
-                        </Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              disabled={template.isBuiltIn}
-                              title={template.isBuiltIn ? "ビルトインテンプレートは削除できません" : "削除"}
-                            >
-                              <TrashIcon className="h-4 w-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>テンプレートの削除</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                "{template.title}"を削除してもよろしいですか？この操作は元に戻せません。
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>キャンセル</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleDeleteTemplate(template.id)}>
-                                削除
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </ScrollArea>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

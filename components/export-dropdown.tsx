@@ -6,10 +6,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
-import { downloadFile } from "@/lib/utils"
+import { downloadFile, generatePDF } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { DownloadIcon } from "lucide-react"
-import { initializeMermaid } from "@/lib/mermaid-utils"
 
 interface ExportDropdownProps {
   markdown: string
@@ -37,9 +36,6 @@ export function ExportDropdown({ markdown, documentTitle }: ExportDropdownProps)
     setIsExporting(true)
 
     try {
-      // Initialize Mermaid
-      initializeMermaid()
-
       // Process markdown for export
       let processedMarkdown = markdown
       if (!markdown.includes("marp: true")) {
@@ -74,40 +70,10 @@ export function ExportDropdown({ markdown, documentTitle }: ExportDropdownProps)
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <title>${documentTitle}</title>
-                <style>
-                  body { margin: 0; padding: 0; }
-                  .marp-container { width: 100%; }
-                  section { 
-                    width: 100%;
-                    height: 100vh;
-                    box-sizing: border-box;
-                    page-break-after: always;
-                    display: flex;
-                    flex-direction: column;
-                    justify-content: center;
-                    padding: 1rem;
-                  }
-                  @media print {
-                    section { page-break-after: always; break-inside: avoid; }
-                  }
-                  ${css}
-                </style>
-                <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
-                <script>
-                  document.addEventListener('DOMContentLoaded', function() {
-                    mermaid.initialize({
-                      startOnLoad: true,
-                      theme: 'default',
-                      securityLevel: 'loose',
-                      fontFamily: 'sans-serif'
-                    });
-                  });
-                </script>
+                <style>${css}</style>
               </head>
               <body>
-                <div class="marp-container">
-                  ${html}
-                </div>
+                ${html}
               </body>
             </html>
           `
@@ -118,89 +84,21 @@ export function ExportDropdown({ markdown, documentTitle }: ExportDropdownProps)
         case "pdf":
           // Render to HTML and generate PDF
           const pdfResult = marp.render(processedMarkdown)
-
-          // Create a hidden iframe to render the PDF
-          const iframe = document.createElement("iframe")
-          iframe.style.position = "fixed"
-          iframe.style.right = "0"
-          iframe.style.bottom = "0"
-          iframe.style.width = "0"
-          iframe.style.height = "0"
-          iframe.style.border = "0"
-          document.body.appendChild(iframe)
-
-          // Create the HTML content with proper page breaks
-          const pdfHTML = `
-            <!DOCTYPE html>
-            <html>
-              <head>
-                <meta charset="UTF-8">
-                <title>${documentTitle}</title>
-                <style>
-                  body { margin: 0; padding: 0; }
-                  section { 
-                    height: 100vh;
-                    page-break-after: always;
-                    display: flex;
-                    flex-direction: column;
-                    justify-content: center;
-                  }
-                  @media print {
-                    @page { size: landscape; margin: 0; }
-                    body { margin: 0; }
-                    section { page-break-after: always; break-inside: avoid; }
-                  }
-                  ${pdfResult.css}
-                </style>
-                <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
-                <script>
-                  mermaid.initialize({
-                    startOnLoad: true,
-                    theme: 'default',
-                    securityLevel: 'loose',
-                    fontFamily: 'sans-serif'
-                  });
-                  
-                  window.onload = function() {
-                    // Wait for Mermaid diagrams to render
-                    setTimeout(() => {
-                      window.print();
-                    }, 1500);
-                  };
-                </script>
-              </head>
-              <body>
-                ${pdfResult.html}
-              </body>
-            </html>
-          `
-
-          // Set the iframe content and trigger print
-          if (iframe.contentWindow) {
-            iframe.contentWindow.document.open()
-            iframe.contentWindow.document.write(pdfHTML)
-            iframe.contentWindow.document.close()
-          }
-
-          // Clean up the iframe after printing
-          setTimeout(() => {
-            document.body.removeChild(iframe)
-          }, 5000)
-
+          await generatePDF(pdfResult.html, documentTitle)
           break
       }
 
       toast({
-        title: "エクスポート成功",
-        description: `${exportFormat.toUpperCase()}形式でエクスポートしました`,
+        title: "Success",
+        description: `Exported as ${exportFormat.toUpperCase()}`,
       })
 
       setIsExportDialogOpen(false)
     } catch (error) {
       console.error("Export failed:", error)
       toast({
-        title: "エクスポート失敗",
-        description: "エクスポート中にエラーが発生しました",
+        title: "Export Failed",
+        description: "An error occurred during export",
         variant: "destructive",
       })
     } finally {
@@ -214,25 +112,25 @@ export function ExportDropdown({ markdown, documentTitle }: ExportDropdownProps)
         <DropdownMenuTrigger asChild>
           <Button variant="outline">
             <DownloadIcon className="h-4 w-4 mr-2" />
-            エクスポート
+            Export
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DialogTrigger asChild>
-            <DropdownMenuItem onSelect={() => setExportFormat("pdf")}>PDFとしてエクスポート</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setExportFormat("pdf")}>Export as PDF</DropdownMenuItem>
           </DialogTrigger>
           <DialogTrigger asChild>
-            <DropdownMenuItem onSelect={() => setExportFormat("html")}>HTMLとしてエクスポート</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setExportFormat("html")}>Export as HTML</DropdownMenuItem>
           </DialogTrigger>
           <DialogTrigger asChild>
-            <DropdownMenuItem onSelect={() => setExportFormat("markdown")}>Markdownとしてエクスポート</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setExportFormat("markdown")}>Export as Markdown</DropdownMenuItem>
           </DialogTrigger>
         </DropdownMenuContent>
       </DropdownMenu>
 
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{exportFormat.toUpperCase()}としてエクスポート</DialogTitle>
+          <DialogTitle>Export as {exportFormat.toUpperCase()}</DialogTitle>
         </DialogHeader>
 
         <div className="py-4 space-y-4">
@@ -242,21 +140,21 @@ export function ExportDropdown({ markdown, documentTitle }: ExportDropdownProps)
               checked={includeSpeakerNotes}
               onCheckedChange={(checked) => setIncludeSpeakerNotes(checked === true)}
             />
-            <Label htmlFor="speaker-notes">スピーカーノートを含める</Label>
+            <Label htmlFor="speaker-notes">Include speaker notes</Label>
           </div>
 
           <p className="text-sm text-muted-foreground">
             {exportFormat === "pdf"
-              ? "プレゼンテーションからPDFファイルを生成します。"
+              ? "This will generate a PDF file from your presentation."
               : exportFormat === "html"
-                ? "任意のブラウザで表示できるスタンドアロンのHTMLファイルを生成します。"
-                : "プレゼンテーションをMarkdownファイルとしてダウンロードします。"}
+                ? "This will generate a standalone HTML file that can be viewed in any browser."
+                : "This will download your presentation as a Markdown file."}
           </p>
         </div>
 
         <DialogFooter>
           <Button onClick={handleExport} disabled={isExporting}>
-            {isExporting ? "エクスポート中..." : `${exportFormat.toUpperCase()}としてエクスポート`}
+            {isExporting ? "Exporting..." : `Export as ${exportFormat.toUpperCase()}`}
           </Button>
         </DialogFooter>
       </DialogContent>

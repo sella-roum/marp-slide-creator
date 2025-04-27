@@ -22,7 +22,6 @@ import {
   QuoteIcon,
   SeparatorHorizontalIcon,
   FileIcon,
-  SaveIcon,
 } from "lucide-react"
 
 interface EditorPaneProps {
@@ -73,37 +72,6 @@ export function EditorPane({ markdown, onChange, currentDocument }: EditorPanePr
       })
     }
   }, [markdown, currentDocument, debouncedSave])
-
-  // Manual save function
-  const handleSave = async () => {
-    if (!currentDocument) return
-
-    try {
-      setIsSaving(true)
-      await updateDocument({
-        ...currentDocument,
-        content: markdown,
-        updatedAt: new Date(),
-      })
-
-      // Always create a version when manually saving
-      await createVersion(currentDocument.id, markdown, "手動保存")
-
-      toast({
-        title: "保存完了",
-        description: "ドキュメントを保存しました",
-      })
-    } catch (error) {
-      console.error("Failed to save document:", error)
-      toast({
-        title: "エラー",
-        description: "ドキュメントの保存に失敗しました",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSaving(false)
-    }
-  }
 
   // Insert text at cursor position
   const insertTextAtCursor = (textBefore: string, textAfter = "") => {
@@ -159,9 +127,6 @@ export function EditorPane({ markdown, onChange, currentDocument }: EditorPanePr
         break
       case "marp-directive":
         insertTextAtCursor("---\nmarp: true\ntheme: default\npaginate: true\n---\n\n")
-        break
-      case "mermaid":
-        insertTextAtCursor("```mermaid\ngraph TD;\n  A[開始] --> B[処理];\n  B --> C[終了];\n```\n")
         break
       case "image-url":
         const url = prompt("画像URLを入力:")
@@ -221,11 +186,12 @@ export function EditorPane({ markdown, onChange, currentDocument }: EditorPanePr
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between p-2 border-b">
         <h3 className="text-sm font-medium truncate">{currentDocument.title}</h3>
-        <div className="flex items-center space-x-2">
-          <Button variant="outline" size="sm" onClick={handleSave} disabled={isSaving} className="flex items-center">
-            <SaveIcon className="h-4 w-4 mr-1" />
-            {isSaving ? "保存中..." : "保存"}
-          </Button>
+        <div className="flex items-center space-x-1">
+          {isSaving ? (
+            <span className="text-xs text-muted-foreground">保存中...</span>
+          ) : (
+            <span className="text-xs text-muted-foreground">保存済み</span>
+          )}
         </div>
       </div>
 
@@ -338,15 +304,6 @@ export function EditorPane({ markdown, onChange, currentDocument }: EditorPanePr
               </Button>
             </TooltipTrigger>
             <TooltipContent>Marpディレクティブ挿入</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="sm" onClick={() => handleToolbarAction("mermaid")}>
-                Mermaid
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Mermaidダイアグラム挿入</TooltipContent>
           </Tooltip>
         </TooltipProvider>
 

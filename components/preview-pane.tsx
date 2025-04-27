@@ -1,9 +1,8 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { ChevronLeftIcon, ChevronRightIcon, FileIcon } from "lucide-react"
-import { initializeMermaid, renderMermaidInIframe } from "@/lib/mermaid-utils"
 
 interface PreviewPaneProps {
   markdown: string
@@ -16,13 +15,6 @@ export function PreviewPane({ markdown }: PreviewPaneProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [marpInstance, setMarpInstance] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
-  const previewContainerRef = useRef<HTMLDivElement>(null)
-  const iframeRef = useRef<HTMLIFrameElement>(null)
-
-  // Initialize Mermaid
-  useEffect(() => {
-    initializeMermaid()
-  }, [])
 
   // Initialize Marp
   useEffect(() => {
@@ -64,11 +56,7 @@ export function PreviewPane({ markdown }: PreviewPaneProps) {
       // Add Marp directives if not present
       let processedMarkdown = markdown
       if (!markdown.includes("marp: true")) {
-        processedMarkdown = `---
-marp: true
----
-
-${markdown}`
+        processedMarkdown = `---\nmarp: true\n---\n\n${markdown}`
       }
 
       // Render markdown to HTML
@@ -95,32 +83,8 @@ ${markdown}`
       console.error("Failed to render markdown:", error)
       setError(`レンダリングエラー: ${error instanceof Error ? error.message : String(error)}`)
       setRenderedHTML("")
-      setTotalSlides(0)
     }
   }, [markdown, marpInstance, currentSlide])
-
-  // Render Mermaid diagrams after HTML is rendered
-  useEffect(() => {
-    if (!renderedHTML || !iframeRef.current) return
-
-    // Wait for iframe content to load
-    const handleIframeLoad = () => {
-      if (iframeRef.current) {
-        renderMermaidInIframe(iframeRef.current)
-      }
-    }
-
-    // Add load event listener to iframe
-    if (iframeRef.current) {
-      iframeRef.current.addEventListener("load", handleIframeLoad)
-    }
-
-    return () => {
-      if (iframeRef.current) {
-        iframeRef.current.removeEventListener("load", handleIframeLoad)
-      }
-    }
-  }, [renderedHTML])
 
   // Navigate between slides
   const goToNextSlide = () => {
@@ -146,7 +110,7 @@ ${markdown}`
   }
 
   return (
-    <div className="flex flex-col h-full" ref={previewContainerRef}>
+    <div className="flex flex-col h-full">
       <div className="flex items-center justify-between p-2 border-b">
         <h3 className="text-sm font-medium">プレビュー</h3>
         <div className="flex items-center space-x-2">
@@ -188,7 +152,6 @@ ${markdown}`
             }}
           >
             <iframe
-              ref={iframeRef}
               srcDoc={renderedHTML}
               className="w-full h-full border-0"
               style={{

@@ -37,11 +37,7 @@ export interface GeminiRequestType {
     currentMarkdown: string
     selection?: string
   }
-  taskType?: "GenerateOutline" | "GenerateTheme" | "GenerateMermaid" | string
-  fileData?: {
-    content: string
-    type: string
-  }
+  taskType?: string
 }
 
 export interface GeminiResponseType {
@@ -53,11 +49,5 @@ export interface GeminiResponseType {
   error?: {
     message: string
     code: string
-    details?: string
   }
-}
-
-export interface MermaidRenderResult {
-  svg: string
-  bindFunctions?: (element: Element) => void
 }

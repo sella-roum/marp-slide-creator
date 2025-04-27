@@ -1,9 +1,8 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { XIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react"
-import { initializeMermaid, renderMermaidInIframe } from "@/lib/mermaid-utils"
 
 interface PresentationModeProps {
   markdown: string
@@ -15,19 +14,11 @@ export function PresentationMode({ markdown, onExit }: PresentationModeProps) {
   const [totalSlides, setTotalSlides] = useState(0)
   const [renderedHTML, setRenderedHTML] = useState("")
   const [isLoading, setIsLoading] = useState(true)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const iframeRef = useRef<HTMLIFrameElement>(null)
-
-  // Initialize Mermaid
-  useEffect(() => {
-    initializeMermaid()
-  }, [])
 
   // Initialize Marp and render markdown
   useEffect(() => {
     const initializeAndRender = async () => {
       try {
-        setIsLoading(true)
         // Import Marp dynamically
         const { Marp } = await import("@marp-team/marp-core")
 
@@ -57,10 +48,8 @@ export function PresentationMode({ markdown, onExit }: PresentationModeProps) {
           <html>
             <head>
               <style>
-                body { margin: 0; overflow: hidden; background-color: black; }
-                .marp-slides { height: 100vh; position: relative; }
-                section { height: 100vh; width: 100vw; box-sizing: border-box; position: absolute; top: 0; left: 0; }
-                section:not(:first-child) { display: none; }
+                body { margin: 0; overflow: hidden; }
+                .marp-slides { height: 100vh; }
                 ${css}
               </style>
             </head>
@@ -100,53 +89,6 @@ export function PresentationMode({ markdown, onExit }: PresentationModeProps) {
     }
   }, [markdown, onExit])
 
-  // Render Mermaid diagrams after HTML is rendered
-  useEffect(() => {
-    if (!renderedHTML || !iframeRef.current) return
-
-    // Wait for iframe content to load
-    const handleIframeLoad = () => {
-      if (iframeRef.current) {
-        renderMermaidInIframe(iframeRef.current)
-      }
-    }
-
-    // Add load event listener to iframe
-    if (iframeRef.current) {
-      iframeRef.current.addEventListener("load", handleIframeLoad)
-    }
-
-    return () => {
-      if (iframeRef.current) {
-        iframeRef.current.removeEventListener("load", handleIframeLoad)
-      }
-    }
-  }, [renderedHTML])
-
-  // Update slide visibility when current slide changes
-  useEffect(() => {
-    if (!iframeRef.current) return
-
-    const iframe = iframeRef.current
-    const iframeDocument = iframe.contentDocument || iframe.contentWindow?.document
-    if (!iframeDocument) return
-
-    // Wait for iframe content to load
-    setTimeout(() => {
-      const sections = iframeDocument.querySelectorAll("section")
-      if (sections.length === 0) return
-
-      // Hide all sections
-      sections.forEach((section, index) => {
-        if (index === currentSlide) {
-          section.style.display = "flex"
-        } else {
-          section.style.display = "none"
-        }
-      })
-    }, 100)
-  }, [currentSlide, renderedHTML])
-
   // Navigate between slides
   const goToNextSlide = () => {
     if (currentSlide < totalSlides - 1) {
@@ -161,7 +103,7 @@ export function PresentationMode({ markdown, onExit }: PresentationModeProps) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black z-50 flex flex-col" ref={containerRef}>
+    <div className="fixed inset-0 bg-black z-50 flex flex-col">
       <div className="absolute top-4 right-4 z-10">
         <Button
           variant="outline"
@@ -205,7 +147,14 @@ export function PresentationMode({ markdown, onExit }: PresentationModeProps) {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
           </div>
         ) : (
-          <iframe ref={iframeRef} srcDoc={renderedHTML} className="w-full h-full border-0" title="Presentation" />
+          <iframe
+            srcDoc={renderedHTML}
+            className="w-full h-full border-0"
+            style={{
+              transform: `translateY(${-100 * currentSlide}vh)`,
+            }}
+            title="Presentation"
+          />
         )}
       </div>
     </div>

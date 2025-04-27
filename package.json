@@ -60,7 +60,6 @@
     "zod": "^3.24.1",
     "@marp-team/marp-core": "latest",
     "uuid": "latest",
-    "mermaid": "latest",
     "@google/genai": "latest"
   },
   "devDependencies": {

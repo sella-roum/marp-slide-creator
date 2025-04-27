@@ -70,21 +70,12 @@ export async function generatePDF(html: string, title: string): Promise<void> {
         <style>
           body {
             font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
           }
-          section {
+          .slide {
             page-break-after: always;
             height: 100vh;
-            width: 100%;
-            box-sizing: border-box;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
             padding: 2rem;
-          }
-          section:last-child {
-            page-break-after: auto;
+            box-sizing: border-box;
           }
         </style>
       </head>

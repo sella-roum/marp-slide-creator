@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Toaster } from "@/components/ui/toaster"
 import { useToast } from "@/hooks/use-toast"
-import { initializeDB, getDocuments, getDocument, updateDocument, createVersion } from "@/lib/db"
+import { initializeDB, getDocuments, getDocument } from "@/lib/db"
 import type { DocumentType } from "@/lib/types"
 import { NavigationPane } from "@/components/navigation-pane"
 import { ChatPane } from "@/components/chat-pane"
@@ -14,7 +14,7 @@ import { PreviewPane } from "@/components/preview-pane"
 import { PresentationMode } from "@/components/presentation-mode"
 import { ExportDropdown } from "@/components/export-dropdown"
 import { VersionHistoryPane } from "@/components/version-history-pane"
-import { LayoutIcon, MessageSquareIcon, HistoryIcon, SaveIcon } from "lucide-react"
+import { LayoutIcon, MessageSquareIcon, HistoryIcon } from "lucide-react"
 
 export default function Home() {
   const { toast } = useToast()
@@ -25,7 +25,6 @@ export default function Home() {
   const [isPresentationMode, setIsPresentationMode] = useState(false)
   const [leftPaneTab, setLeftPaneTab] = useState("documents")
   const [rightPaneTab, setRightPaneTab] = useState("editor")
-  const [isSaving, setIsSaving] = useState(false)
 
   // Initialize IndexedDB
   useEffect(() => {
@@ -93,39 +92,6 @@ export default function Home() {
     setDocuments(docs)
   }
 
-  // Save document manually
-  const handleSaveDocument = async () => {
-    if (!currentDocument) return
-
-    try {
-      setIsSaving(true)
-
-      // Update the document
-      await updateDocument({
-        ...currentDocument,
-        content: markdownContent,
-        updatedAt: new Date(),
-      })
-
-      // Create a version
-      await createVersion(currentDocument.id, markdownContent, "Manual save")
-
-      toast({
-        title: "保存完了",
-        description: "ドキュメントを保存しました",
-      })
-    } catch (error) {
-      console.error("Failed to save document:", error)
-      toast({
-        title: "エラー",
-        description: "ドキュメントの保存に失敗しました",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
   if (isPresentationMode && currentDocument) {
     return <PresentationMode markdown={markdownContent} onExit={togglePresentationMode} />
   }
@@ -136,10 +102,6 @@ export default function Home() {
       <header className="flex items-center justify-between p-2 border-b">
         <h1 className="text-xl font-bold">AI-Assisted Marp Slide Creator</h1>
         <div className="flex items-center space-x-2">
-          <Button variant="outline" onClick={handleSaveDocument} disabled={!currentDocument || isSaving}>
-            <SaveIcon className="h-4 w-4 mr-2" />
-            {isSaving ? "保存中..." : "保存"}
-          </Button>
           <ExportDropdown markdown={markdownContent} documentTitle={currentDocument?.title || "Untitled"} />
           <Button variant="outline" onClick={togglePresentationMode} disabled={!currentDocument}>
             Present

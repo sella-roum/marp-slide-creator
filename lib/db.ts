@@ -368,22 +368,6 @@ export const createTemplate = async (title: string, content: string): Promise<Te
   })
 }
 
-// Template operations
-export const deleteTemplate = async (id: string): Promise<boolean> => {
-  const db = await getDBConnection()
-
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORES.TEMPLATES, "readwrite")
-    const store = transaction.objectStore(STORES.TEMPLATES)
-    const request = store.delete(id)
-
-    request.onsuccess = () => resolve(true)
-    request.onerror = () => reject(new Error("Failed to delete template"))
-
-    transaction.oncomplete = () => db.close()
-  })
-}
-
 // Chat history operations
 export const saveChatMessage = async (
   documentId: string,
