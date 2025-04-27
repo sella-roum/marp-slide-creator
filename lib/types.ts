@@ -32,6 +32,16 @@ export interface ChatMessageType {
   markdownCode?: string | null
 }
 
+// --- ▼▼▼ 画像タイプを追加 ▼▼▼ ---
+export interface ImageType {
+  id: string;          // 一意なID (UUID)
+  name: string;        // ファイル名
+  dataUrl: string;     // Base64データURL
+  createdAt: Date;     // アップロード日時
+  // documentId?: string; // オプション: ドキュメントに関連付ける場合
+}
+// --- ▲▲▲ 画像タイプを追加 ▲▲▲ ---
+
 export interface GeminiRequestType {
   prompt: string
   context: {

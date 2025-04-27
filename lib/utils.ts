@@ -23,17 +23,62 @@ export function debounce<T extends (...args: any[]) => any>(func: T, wait: numbe
   }
 }
 
-// Extract code blocks from Gemini response
+// --- extractMarkdownCode 関数を修正 ---
+/**
+ * テキストから Marp スライドとして有効そうな Markdown 部分を抽出します。
+ * - 行頭の `---` または `#` から始まる最初の行を探し、そこからテキストの最後までを抽出します。
+ * - 抽出した部分がコードブロックで囲まれていれば、その中身を返します。
+ * - 上記で見つからない場合、従来の ```markdown ... ``` または ```marp ... ``` ブロックを探します。
+ */
 export function extractMarkdownCode(text: string): string | null {
-  const codeBlockRegex = /```(?:markdown|marp)?\s*([\s\S]*?)```/g
-  const matches = [...text.matchAll(codeBlockRegex)]
+  // 1. Marpの開始パターン (行頭の --- または #) を探す
+  const marpStartRegex = /^(?:---|\s*#)/m;
+  const startIndex = text.search(marpStartRegex);
 
-  if (matches.length > 0) {
-    return matches[0][1].trim()
+  if (startIndex !== -1) {
+    // 開始位置からテキストの最後までを抽出
+    let extracted = text.substring(startIndex).trim();
+
+    // 2. 抽出結果全体がコードブロックで囲まれていないか確認し、囲まれていれば中身を取り出す
+    //    (例: Geminiが説明文なしでコードブロックだけを返す場合)
+    //    コードブロックのラベルは任意 (markdown, marp, または無し)
+    const fullCodeBlockMatch = extracted.match(/^```(?:markdown|marp)?\s*([\s\S]*?)\s*```$/);
+    if (fullCodeBlockMatch && fullCodeBlockMatch[1]) {
+        // コードブロックの中身を返す
+        console.log("Extracted content from full code block.");
+        return fullCodeBlockMatch[1].trim();
+    }
+
+    // 3. コードブロックで囲まれていない場合は、抽出したテキストをそのまま返す
+    //    (ただし、末尾に不要な ``` が残る可能性を考慮して削除)
+    extracted = extracted.replace(/\s*```$/, '').trim(); // 末尾の ``` を削除
+    console.log("Extracted content from Marp start pattern.");
+    return extracted;
   }
 
-  return null
+  // 4. Marp の開始パターンが見つからない場合、従来のコードブロック抽出を試す
+  //    (特定のラベル付きコードブロックを探す)
+  console.log("Marp start pattern not found, trying specific code block extraction...");
+  const specificCodeBlockRegex = /```(?:markdown|marp)\s*([\s\S]*?)```/g; // ラベル指定あり
+  const matches = [...text.matchAll(specificCodeBlockRegex)];
+  if (matches.length > 0 && matches[0][1]) {
+    console.log("Extracted content from specific labeled code block.");
+    return matches[0][1].trim();
+  }
+
+  // 5. それでも見つからない場合、ラベルなしを含む最初のコードブロックの中身を試す
+  console.log("Specific code block not found, trying any code block...");
+  const anyCodeBlockRegex = /```([\s\S]*?)```/; // ラベル問わず最初のブロック
+   const anyMatch = text.match(anyCodeBlockRegex);
+   if (anyMatch && anyMatch[1]) {
+     console.log("Extracted content from any code block.");
+     return anyMatch[1].trim();
+   }
+
+  console.log("No Marp content or code block found.");
+  return null; // 何も見つからなければ null
 }
+// --- extractMarkdownCode 修正ここまで ---
 
 // Convert local image to Base64
 export function imageToBase64(file: File): Promise<string> {
@@ -56,10 +101,6 @@ export function imageToBase64(file: File): Promise<string> {
 
 // Generate PDF from HTML content
 export async function generatePDF(html: string, title: string): Promise<void> {
-  // This is a simplified version. In a real app, you'd use a library like jsPDF
-  // or html2pdf.js to generate a proper PDF.
-
-  // For now, we'll just open a new window with the HTML content
   const printWindow = window.open("", "_blank")
   if (!printWindow) return
 
@@ -87,7 +128,6 @@ export async function generatePDF(html: string, title: string): Promise<void> {
 
   printWindow.document.close()
 
-  // Trigger print dialog
   setTimeout(() => {
     printWindow.print()
   }, 500)

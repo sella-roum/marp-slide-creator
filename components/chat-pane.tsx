@@ -2,14 +2,14 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"; // AvatarImage を削除 (今回は使わないため)
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { SendIcon, BotIcon, UserIcon, CopyIcon, CheckIcon, Loader2Icon, Trash2Icon } from "lucide-react"; // Trash2Icon を追加
+import { SendIcon, BotIcon, UserIcon, CopyIcon, CheckIcon, Loader2Icon, Trash2Icon, ClipboardPasteIcon } from "lucide-react"; // ClipboardPasteIcon を追加
 import { useToast } from "@/hooks/use-toast";
-import type { DocumentType, GeminiRequestType, GeminiResponseType, ChatMessageType } from "@/lib/types"; // ChatMessageType をインポート
+import type { DocumentType, GeminiRequestType, GeminiResponseType, ChatMessageType } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
-import { addChatMessage, getChatMessages, clearChatMessages } from "@/lib/db"; // DB関数をインポート
+import { addChatMessage, getChatMessages, clearChatMessages } from "@/lib/db";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,9 +20,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog" // 確認ダイアログ用
-
-// ChatMessage 型は lib/types.ts からインポート
+} from "@/components/ui/alert-dialog";
 
 interface ChatPaneProps {
   currentDocument: DocumentType | null;
@@ -33,8 +31,8 @@ export function ChatPane({ currentDocument, onApplyToEditor }: ChatPaneProps) {
   const { toast } = useToast();
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
   const [inputValue, setInputValue] = useState('');
-  const [isLoading, setIsLoading] = useState(false); // AI応答待ち
-  const [isHistoryLoading, setIsHistoryLoading] = useState(false); // 履歴読み込み中
+  const [isLoading, setIsLoading] = useState(false);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [copiedStates, setCopiedStates] = useState<Record<string, boolean>>({});
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -51,24 +49,23 @@ export function ChatPane({ currentDocument, onApplyToEditor }: ChatPaneProps) {
 
   // メッセージ追加時に一番下にスクロール
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
-    // 履歴読み込み直後は即時スクロール、通常はスムーズスクロール
     setTimeout(() => {
         if (viewportRef.current) {
             viewportRef.current.scrollTo({ top: viewportRef.current.scrollHeight, behavior });
         }
-    }, 100); // 少し遅延させてレンダリング完了を待つ
+    }, 100);
   }, []);
 
   // ドキュメント変更時にチャット履歴を読み込む
   useEffect(() => {
     const loadHistory = async () => {
-      if (currentDocument) {
+      if (currentDocument?.id) {
         setIsHistoryLoading(true);
-        setMessages([]); // 読み込み前にクリア
+        setMessages([]);
+        console.log(`Loading chat history for document: ${currentDocument.id}`);
         try {
           const history = await getChatMessages(currentDocument.id);
           setMessages(history);
-          // 履歴読み込み完了後に一番下にスクロール (即時)
           scrollToBottom('auto');
         } catch (error) {
           console.error("Failed to load chat history:", error);
@@ -81,21 +78,21 @@ export function ChatPane({ currentDocument, onApplyToEditor }: ChatPaneProps) {
           setIsHistoryLoading(false);
         }
       } else {
-        setMessages([]); // ドキュメントがない場合はクリア
+        setMessages([]);
+        setIsHistoryLoading(false);
+        console.log("No current document or document ID, clearing chat history.");
       }
     };
     loadHistory();
-  }, [currentDocument, toast, scrollToBottom]); // scrollToBottom を依存配列に追加
+  }, [currentDocument?.id, toast, scrollToBottom]);
 
   // 新しいメッセージをDBに保存する関数
   const saveMessage = async (message: Omit<ChatMessageType, 'id'>) => {
-      if (!currentDocument) return;
+      if (!currentDocument?.id) return;
       try {
-          // documentId を付与して保存
           await addChatMessage({ ...message, documentId: currentDocument.id });
       } catch (error) {
           console.error("Failed to save chat message:", error);
-          // 保存失敗時のエラーハンドリング (必要であれば)
           toast({
               title: "エラー",
               description: "チャットメッセージの保存に失敗しました。",
@@ -107,22 +104,20 @@ export function ChatPane({ currentDocument, onApplyToEditor }: ChatPaneProps) {
   // メッセージ送信処理
   const handleSendMessage = async () => {
     const prompt = inputValue.trim();
-    if (!prompt || isLoading || !currentDocument) return;
+    if (!prompt || isLoading || !currentDocument?.id) return;
 
-    const newUserMessage: Omit<ChatMessageType, 'id'> = { // id を除外
+    const newUserMessage: Omit<ChatMessageType, 'id'> = {
       role: 'user',
       content: prompt,
       timestamp: new Date(),
-      documentId: currentDocument.id, // documentId を含める
+      documentId: currentDocument.id,
     };
 
-    // UIに即時反映
-    setMessages((prev) => [...prev, { ...newUserMessage, id: crypto.randomUUID() }]); // UI用には仮IDを付与
+    setMessages((prev) => [...prev, { ...newUserMessage, id: crypto.randomUUID() }]);
     setInputValue('');
     setIsLoading(true);
-    scrollToBottom(); // 送信時にもスクロール
+    scrollToBottom();
 
-    // DBに保存
     await saveMessage(newUserMessage);
 
     try {
@@ -146,16 +141,14 @@ export function ChatPane({ currentDocument, onApplyToEditor }: ChatPaneProps) {
       }
 
       if (data.result) {
-        const newAssistantMessage: Omit<ChatMessageType, 'id'> = { // id を除外
+        const newAssistantMessage: Omit<ChatMessageType, 'id'> = {
           role: 'assistant',
-          content: data.result.text,
-          markdownCode: data.result.markdownCode,
+          content: data.result.text, // 応答テキスト全体を content に保存
+          markdownCode: data.result.markdownCode, // 抽出したコードを markdownCode に保存
           timestamp: new Date(),
-          documentId: currentDocument.id, // documentId を含める
+          documentId: currentDocument.id,
         };
-        // UIに反映
         setMessages((prev) => [...prev, { ...newAssistantMessage, id: crypto.randomUUID() }]);
-        // DBに保存
         await saveMessage(newAssistantMessage);
       } else {
         throw new Error('AIからの応答が空でした。');
@@ -169,29 +162,27 @@ export function ChatPane({ currentDocument, onApplyToEditor }: ChatPaneProps) {
         description: errorContent,
         variant: "destructive",
       });
-      const errorMessage: Omit<ChatMessageType, 'id'> = { // id を除外
+      const errorMessage: Omit<ChatMessageType, 'id'> = {
         role: 'system',
         content: errorContent,
         timestamp: new Date(),
-        documentId: currentDocument.id, // documentId を含める
+        documentId: currentDocument.id,
       };
-      // UIに反映
       setMessages((prev) => [...prev, { ...errorMessage, id: crypto.randomUUID() }]);
-      // DBに保存 (エラーメッセージも保存する場合)
       await saveMessage(errorMessage);
     } finally {
       setIsLoading(false);
       document.getElementById('chat-input')?.focus();
-      scrollToBottom(); // 応答後にもスクロール
+      scrollToBottom();
     }
   };
 
   // チャット履歴クリア処理
   const handleClearChat = async () => {
-      if (!currentDocument) return;
+      if (!currentDocument?.id) return;
       try {
           await clearChatMessages(currentDocument.id);
-          setMessages([]); // UIをクリア
+          setMessages([]);
           toast({ title: "チャット履歴をクリアしました" });
       } catch (error) {
           console.error("Failed to clear chat history:", error);
@@ -219,19 +210,21 @@ export function ChatPane({ currentDocument, onApplyToEditor }: ChatPaneProps) {
     });
   };
 
+  // --- handleApplyCode を修正 ---
   // コードをエディタに適用
-  const handleApplyCode = (code: string | null | undefined) => {
-    if (code) {
-      onApplyToEditor(code);
-      toast({ title: "コードをエディタに適用しました" });
+  const handleApplyCode = (codeToApply: string | null | undefined) => {
+    if (codeToApply) {
+      onApplyToEditor(codeToApply);
+      toast({ title: "抽出されたコードをエディタに適用しました" });
     } else {
-        toast({ title: "適用できるコードがありません", variant: "destructive" });
+        // 適用できるコードが見つからなかった場合
+        toast({ title: "適用失敗", description: "応答からMarpコードを抽出できませんでした。", variant: "destructive" });
     }
   };
+  // --- handleApplyCode 修正ここまで ---
 
   return (
     <div className="flex flex-col h-full bg-background">
-      {/* --- クリアボタンを追加 --- */}
       <div className="p-2 border-b flex justify-end">
          <AlertDialog>
             <AlertDialogTrigger asChild>
@@ -256,29 +249,28 @@ export function ChatPane({ currentDocument, onApplyToEditor }: ChatPaneProps) {
             </AlertDialogContent>
         </AlertDialog>
       </div>
-      {/* --- クリアボタンここまで --- */}
 
       <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
         <div className="space-y-4">
-          {isHistoryLoading && ( // 履歴読み込み中の表示
+          {isHistoryLoading && (
             <div className="flex justify-center items-center h-full">
                 <Loader2Icon className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
           )}
-          {!isHistoryLoading && messages.length === 0 && ( // 履歴がない場合の表示
+          {!isHistoryLoading && messages.length === 0 && (
             <div className="text-center text-muted-foreground text-sm py-10">
                 チャット履歴はありません。
             </div>
           )}
           {!isHistoryLoading && messages.map((message) => (
             <div
-              key={message.id} // DBから読み込んだID or 仮ID
+              key={message.id}
               className={`flex items-end gap-2 ${
                 message.role === 'user' ? 'justify-end' : 'justify-start'
               }`}
             >
               {message.role === 'assistant' && (
-                <Avatar className="w-6 h-6 self-start flex-shrink-0"> {/* flex-shrink-0 を追加 */}
+                <Avatar className="w-6 h-6 self-start flex-shrink-0">
                   <AvatarFallback><BotIcon className="w-4 h-4" /></AvatarFallback>
                 </Avatar>
               )}
@@ -290,9 +282,12 @@ export function ChatPane({ currentDocument, onApplyToEditor }: ChatPaneProps) {
                       : 'bg-muted text-muted-foreground'
                   } break-words whitespace-pre-wrap`}
                 >
+                  {/* 応答テキスト全体を表示 */}
                   {message.content}
+
+                  {/* AIの応答で抽出されたコードがある場合にボタンを表示 */}
                   {message.role === 'assistant' && message.markdownCode && (
-                    <div className="mt-2 pt-2 border-t border-muted-foreground/20 flex flex-wrap gap-2"> {/* flex-wrap を追加 */}
+                    <div className="mt-2 pt-2 border-t border-muted-foreground/20 flex flex-wrap gap-2">
                        <Button
                         variant="ghost"
                         size="sm"
@@ -304,16 +299,20 @@ export function ChatPane({ currentDocument, onApplyToEditor }: ChatPaneProps) {
                         ) : (
                           <CopyIcon className="w-3 h-3 mr-1" />
                         )}
-                        コピー
+                        コードコピー
                       </Button>
+                      {/* --- ボタンの onClick と disabled を修正 --- */}
                       <Button
                         variant="ghost"
                         size="sm"
                         className="text-xs h-7 px-2"
-                        onClick={() => handleApplyCode(message.markdownCode)}
+                        onClick={() => handleApplyCode(message.markdownCode)} // markdownCode を渡す
+                        disabled={!message.markdownCode} // markdownCode がなければ無効
                       >
+                        <ClipboardPasteIcon className="w-3 h-3 mr-1" /> {/* アイコン変更 */}
                         エディタに適用
                       </Button>
+                      {/* --- ボタン修正ここまで --- */}
                     </div>
                   )}
                 </div>
@@ -324,13 +323,13 @@ export function ChatPane({ currentDocument, onApplyToEditor }: ChatPaneProps) {
                  </div>
                )}
               {message.role === 'user' && (
-                <Avatar className="w-6 h-6 flex-shrink-0"> {/* flex-shrink-0 を追加 */}
+                <Avatar className="w-6 h-6 flex-shrink-0">
                   <AvatarFallback><UserIcon className="w-4 h-4" /></AvatarFallback>
                 </Avatar>
               )}
             </div>
           ))}
-          {isLoading && !isHistoryLoading && ( // AI応答待ちの表示 (履歴読み込み中ではない場合のみ)
+          {isLoading && !isHistoryLoading && (
              <div className="flex items-end gap-2 justify-start">
                 <Avatar className="w-6 h-6 self-start flex-shrink-0">
                   <AvatarFallback><BotIcon className="w-4 h-4" /></AvatarFallback>

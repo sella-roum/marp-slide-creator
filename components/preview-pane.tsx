@@ -1,175 +1,143 @@
 "use client"
 
 import { useState, useEffect } from "react"
-// import { Button } from "@/components/ui/button" // Button は不要になる
-// import { ChevronLeftIcon, ChevronRightIcon, FileIcon } from "lucide-react" // Chevron アイコンは不要
-import { FileIcon } from "lucide-react" // FileIcon のみ残す
+import { FileIcon, Loader2Icon, AlertCircleIcon } from "lucide-react" // AlertCircleIcon を追加
+import { processMarkdownForRender } from "@/lib/markdown-processor"; // 作成した関数をインポート
 
 interface PreviewPaneProps {
   markdown: string
 }
 
 export function PreviewPane({ markdown }: PreviewPaneProps) {
-  // const [currentSlide, setCurrentSlide] = useState(0) // 削除
-  // const [totalSlides, setTotalSlides] = useState(0) // 削除
   const [renderedHTML, setRenderedHTML] = useState("")
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(true) // Marp初期化用
+  const [isProcessing, setIsProcessing] = useState(false); // Markdown処理中用
   const [marpInstance, setMarpInstance] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
 
   // Initialize Marp
   useEffect(() => {
     const initializeMarp = async () => {
+      setIsLoading(true); // 初期化開始
+      setError(null);
       try {
-        setIsLoading(true)
-        // Import Marp dynamically
-        const { Marp } = await import("@marp-team/marp-core")
-
-        // Create Marp instance
-        const marp = new Marp({
-          html: true,
-          math: true,
-          minifyCSS: false,
-        })
-
-        setMarpInstance(marp)
-        setError(null)
-        setIsLoading(false)
-      } catch (error) {
-        console.error("Failed to initialize Marp:", error)
-        setError("Marpの初期化に失敗しました")
-        setIsLoading(false)
+        const { Marp } = await import("@marp-team/marp-core");
+        const marp = new Marp({ html: true, math: true, minifyCSS: false });
+        setMarpInstance(marp);
+      } catch (err) {
+        console.error("Failed to initialize Marp:", err);
+        setError("Marpの初期化に失敗しました");
+      } finally {
+        setIsLoading(false); // 初期化完了
       }
-    }
-
-    initializeMarp()
-  }, [])
+    };
+    initializeMarp();
+  }, []);
 
   // Render markdown with Marp
   useEffect(() => {
-    if (!marpInstance || !markdown) {
-      setRenderedHTML("")
-      // setTotalSlides(0) // 削除
-      return
-    }
+    // Marp インスタンスがまだないか、処理中の場合は何もしない
+    if (!marpInstance || isProcessing) return;
 
-    try {
-      // Add Marp directives if not present
-      let processedMarkdown = markdown
-      if (!markdown.includes("marp: true")) {
-        processedMarkdown = `---\nmarp: true\n---\n\n${markdown}`
-      }
+    const render = async () => {
+        // Markdownが空の場合
+        if (!markdown) {
+            setRenderedHTML("");
+            setError(null);
+            setIsProcessing(false);
+            return;
+        }
 
-      // Render markdown to HTML
-      const { html, css } = marpInstance.render(processedMarkdown)
+        setIsProcessing(true);
+        setError(null);
+        // setRenderedHTML(""); // 処理中に前の表示を残すかクリアするかは好み
 
-      // Count slides (削除しても良いが、デバッグ等で役立つ可能性もあるのでコメントアウト)
-      // const slideCount = (html.match(/<section/g) || []).length
-      // setTotalSlides(slideCount)
+        try {
+            console.log("Processing markdown for preview...");
+            const processedMarkdown = await processMarkdownForRender(markdown);
+            console.log("Markdown processed.");
 
-      // Ensure current slide is within bounds (削除)
-      // if (currentSlide >= slideCount) {
-      //   setCurrentSlide(Math.max(0, slideCount - 1))
-      // }
+            let finalMarkdown = processedMarkdown;
+            if (!finalMarkdown.includes("marp: true")) {
+                finalMarkdown = `---\nmarp: true\n---\n\n${finalMarkdown}`;
+            }
 
-      // Combine HTML and CSS
-      const fullHTML = `
-        <style>${css}</style>
-        ${html}
-      `
+            const { html, css } = marpInstance.render(finalMarkdown);
 
-      setRenderedHTML(fullHTML)
-      setError(null)
-    } catch (error) {
-      console.error("Failed to render markdown:", error)
-      setError(`レンダリングエラー: ${error instanceof Error ? error.message : String(error)}`)
-      setRenderedHTML("")
-    }
-  // }, [markdown, marpInstance, currentSlide]) // currentSlide を依存配列から削除
-  }, [markdown, marpInstance])
+            const customCSS = `
+                section:not(:last-of-type) { border-bottom: 2px dashed #ccc; margin-bottom: 1rem; padding-bottom: 1rem; }
+                body { padding: 1rem; background-color: #f0f0f0; }
+                section { box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-radius: 4px; overflow: hidden; }
+            `;
 
-  // Navigate between slides (削除)
-  // const goToNextSlide = () => {
-  //   if (currentSlide < totalSlides - 1) {
-  //     setCurrentSlide(currentSlide + 1)
-  //   }
-  // }
-  //
-  // const goToPrevSlide = () => {
-  //   if (currentSlide > 0) {
-  //     setCurrentSlide(currentSlide - 1)
-  //   }
-  // }
+            const fullHTML = `<style>${css}${customCSS}</style>${html}`;
+            setRenderedHTML(fullHTML);
 
-  if (!markdown) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full p-4 text-center text-muted-foreground">
-        <FileIcon className="h-12 w-12 mb-4 opacity-50" />
-        <p>プレビューするコンテンツがありません</p>
-        <p className="text-sm mt-2">エディタでMarkdownを入力してください</p>
-      </div>
-    )
-  }
+        } catch (err) {
+            console.error("Failed to process or render markdown:", err);
+            setError(`プレビュー生成エラー: ${err instanceof Error ? err.message : String(err)}`);
+            setRenderedHTML("");
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    // debounce をかけると入力中のプレビュー更新が遅れるので、ここでは直接実行
+    render();
+
+  }, [markdown, marpInstance]); // isProcessing を依存配列から削除
+
 
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between p-2 border-b">
         <h3 className="text-sm font-medium">プレビュー</h3>
-        {/* --- ページネーション UI 削除 ここから ---
-        <div className="flex items-center space-x-2">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={goToPrevSlide}
-            disabled={currentSlide === 0 || totalSlides === 0}
-          >
-            <ChevronLeftIcon className="h-4 w-4" />
-          </Button>
-          <span className="text-sm">{totalSlides > 0 ? `${currentSlide + 1}/${totalSlides}` : "0/0"}</span>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={goToNextSlide}
-            disabled={currentSlide === totalSlides - 1 || totalSlides === 0}
-          >
-            <ChevronRightIcon className="h-4 w-4" />
-          </Button>
-        </div>
-        --- ページネーション UI 削除 ここまで --- */}
+        {(isLoading || isProcessing) && <Loader2Icon className="h-4 w-4 animate-spin text-muted-foreground" />}
       </div>
 
-      <div className="flex-1 overflow-auto relative bg-gray-100 dark:bg-gray-800 p-4"> {/* overflow-hidden から overflow-auto に変更し、背景色とパディングを追加 */}
-        {isLoading ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-          </div>
-        ) : error ? (
+      <div className="flex-1 overflow-auto relative bg-gray-200 dark:bg-gray-900">
+        {/* 初期化中 */}
+        {isLoading && (
+             <div className="flex items-center justify-center h-full">
+                <Loader2Icon className="h-8 w-8 animate-spin text-primary" />
+             </div>
+        )}
+        {/* 処理中 */}
+        {!isLoading && isProcessing && (
+             <div className="flex items-center justify-center h-full absolute inset-0 bg-white/50 dark:bg-black/50 z-10">
+                <Loader2Icon className="h-8 w-8 animate-spin text-muted-foreground" />
+                <p className="ml-2 text-muted-foreground">プレビューを更新中...</p>
+             </div>
+        )}
+        {/* エラー表示 */}
+        {!isLoading && error && (
           <div className="flex flex-col items-center justify-center h-full p-4 text-center text-destructive">
+            <AlertCircleIcon className="w-8 h-8 mb-2" />
             <p>{error}</p>
           </div>
-        ) : renderedHTML ? (
-          <div
-            className="w-full h-full"
-            // style={{ // 削除
-            //   overflow: "hidden",
-            //   position: "relative",
-            // }}
-          >
-            <iframe
-              srcDoc={renderedHTML}
-              className="w-full h-full border-0"
-              // style={{ // 削除
-              //   transform: `translateY(${-100 * currentSlide}%)`,
-              //   height: `${totalSlides * 100}%`,
-              // }}
-              title="Marp Preview"
-              // iframe の sandbox 属性を追加してセキュリティを高めることを検討
-              // sandbox="allow-scripts allow-same-origin"
-            />
-          </div>
-        ) : (
-          <div className="flex items-center justify-center h-full text-muted-foreground">
-            プレビューするコンテンツがありません
+        )}
+        {/* コンテンツ表示エリア (処理中でも表示されるように) */}
+        {!isLoading && !error && (
+          <div className={`w-full h-full p-4 ${isProcessing ? 'opacity-50' : ''}`}> {/* 処理中は少し薄くする */}
+            {renderedHTML ? (
+                <iframe
+                srcDoc={renderedHTML}
+                className="w-full h-full border-0 rounded bg-white" // iframeに背景色指定
+                title="Marp Preview"
+                sandbox="allow-scripts allow-same-origin"
+                />
+            ) : (
+                 markdown ? ( // Markdownはあるがレンダリング結果がない場合 (エラー後など)
+                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                        プレビューを生成できませんでした。
+                    </div>
+                 ) : ( // Markdown自体がない場合
+                    <div className="flex flex-col items-center justify-center h-full p-4 text-center text-muted-foreground">
+                        <FileIcon className="h-12 w-12 mb-4 opacity-50" />
+                        <p>プレビューするコンテンツがありません</p>
+                    </div>
+                 )
+            )}
           </div>
         )}
       </div>

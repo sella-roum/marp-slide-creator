@@ -3,12 +3,13 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog" // DialogClose をインポート
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { downloadFile, generatePDF } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
-import { DownloadIcon } from "lucide-react"
+import { DownloadIcon, Loader2Icon } from "lucide-react"
+import { processMarkdownForRender } from "@/lib/markdown-processor"; // インポート
 
 interface ExportDropdownProps {
   markdown: string
@@ -25,84 +26,53 @@ export function ExportDropdown({ markdown, documentTitle }: ExportDropdownProps)
   // Handle export
   const handleExport = async () => {
     if (!markdown) {
-      toast({
-        title: "エラー",
-        description: "エクスポートするコンテンツがありません",
-        variant: "destructive",
-      })
-      return
+        toast({ title: "エラー", description: "エクスポートするコンテンツがありません", variant: "destructive" });
+        return;
     }
 
-    setIsExporting(true)
+    setIsExporting(true);
 
     try {
-      // Process markdown for export
-      let processedMarkdown = markdown
-      if (!markdown.includes("marp: true")) {
-        processedMarkdown = `---\nmarp: true\n---\n\n${markdown}`
+      console.log("Processing markdown for export...");
+      let processedMarkdown = await processMarkdownForRender(markdown);
+      console.log("Markdown processed for export.");
+
+      if (!processedMarkdown.includes("marp: true")) {
+        processedMarkdown = `---\nmarp: true\n---\n\n${processedMarkdown}`;
       }
 
-      // Import Marp dynamically
-      const { Marp } = await import("@marp-team/marp-core")
-
-      // Create Marp instance
-      const marp = new Marp({
-        html: true,
-        math: true,
-        minifyCSS: false,
-      })
-
-      // Handle different export formats
-      switch (exportFormat) {
-        case "markdown":
-          // Download as Markdown
-          downloadFile(processedMarkdown, `${documentTitle}.md`, "text/markdown")
-          break
-
-        case "html":
-          // Render to HTML and download
-          const { html, css } = marp.render(processedMarkdown)
-
-          const fullHTML = `
-            <!DOCTYPE html>
-            <html>
-              <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>${documentTitle}</title>
-                <style>${css}</style>
-              </head>
-              <body>
-                ${html}
-              </body>
-            </html>
-          `
-
-          downloadFile(fullHTML, `${documentTitle}.html`, "text/html")
-          break
-
-        case "pdf":
-          // Render to HTML and generate PDF
-          const pdfResult = marp.render(processedMarkdown)
-          await generatePDF(pdfResult.html, documentTitle)
-          break
+      if (exportFormat === "markdown") {
+        downloadFile(processedMarkdown, `${documentTitle}.md`, "text/markdown");
+        toast({ title: "成功", description: `MARKDOWNとしてエクスポートしました` });
+        setIsExportDialogOpen(false);
+        setIsExporting(false);
+        return;
       }
 
-      toast({
-        title: "Success",
-        description: `Exported as ${exportFormat.toUpperCase()}`,
-      })
+      const { Marp } = await import("@marp-team/marp-core");
+      const marp = new Marp({ html: true, math: true, minifyCSS: false });
+      const { html, css } = marp.render(processedMarkdown);
 
-      setIsExportDialogOpen(false)
+      if (exportFormat === "html") {
+        const fullHTML = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${documentTitle}</title><style>${css}</style></head><body>${html}</body></html>`;
+        downloadFile(fullHTML, `${documentTitle}.html`, "text/html");
+      } else if (exportFormat === "pdf") {
+        // generatePDF は HTML を受け取る想定
+        await generatePDF(html, documentTitle);
+      }
+
+      toast({ title: "成功", description: `${exportFormat.toUpperCase()}としてエクスポートしました` });
+      setIsExportDialogOpen(false);
+
     } catch (error) {
-      console.error("Export failed:", error)
+      console.error("Export failed:", error);
       toast({
-        title: "Export Failed",
-        description: "An error occurred during export",
+        title: "エクスポート失敗",
+        description: `エクスポート中にエラー: ${error instanceof Error ? error.message : String(error)}`,
         variant: "destructive",
-      })
+      });
     } finally {
-      setIsExporting(false)
+      setIsExporting(false);
     }
   }
 
@@ -116,45 +86,32 @@ export function ExportDropdown({ markdown, documentTitle }: ExportDropdownProps)
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DialogTrigger asChild>
-            <DropdownMenuItem onSelect={() => setExportFormat("pdf")}>Export as PDF</DropdownMenuItem>
-          </DialogTrigger>
-          <DialogTrigger asChild>
-            <DropdownMenuItem onSelect={() => setExportFormat("html")}>Export as HTML</DropdownMenuItem>
-          </DialogTrigger>
-          <DialogTrigger asChild>
-            <DropdownMenuItem onSelect={() => setExportFormat("markdown")}>Export as Markdown</DropdownMenuItem>
-          </DialogTrigger>
+          <DialogTrigger asChild><DropdownMenuItem onSelect={() => setExportFormat("pdf")}>PDFとしてエクスポート</DropdownMenuItem></DialogTrigger>
+          <DialogTrigger asChild><DropdownMenuItem onSelect={() => setExportFormat("html")}>HTMLとしてエクスポート</DropdownMenuItem></DialogTrigger>
+          <DialogTrigger asChild><DropdownMenuItem onSelect={() => setExportFormat("markdown")}>Markdownとしてエクスポート</DropdownMenuItem></DialogTrigger>
         </DropdownMenuContent>
       </DropdownMenu>
 
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Export as {exportFormat.toUpperCase()}</DialogTitle>
+          <DialogTitle>{exportFormat.toUpperCase()}としてエクスポート</DialogTitle>
         </DialogHeader>
-
         <div className="py-4 space-y-4">
           <div className="flex items-center space-x-2">
-            <Checkbox
-              id="speaker-notes"
-              checked={includeSpeakerNotes}
-              onCheckedChange={(checked) => setIncludeSpeakerNotes(checked === true)}
-            />
-            <Label htmlFor="speaker-notes">Include speaker notes</Label>
+            <Checkbox id="speaker-notes" checked={includeSpeakerNotes} onCheckedChange={(checked) => setIncludeSpeakerNotes(checked === true)} disabled />
+            <Label htmlFor="speaker-notes" className="text-muted-foreground">スピーカーノートを含める (未対応)</Label>
           </div>
-
           <p className="text-sm text-muted-foreground">
-            {exportFormat === "pdf"
-              ? "This will generate a PDF file from your presentation."
-              : exportFormat === "html"
-                ? "This will generate a standalone HTML file that can be viewed in any browser."
-                : "This will download your presentation as a Markdown file."}
+            {exportFormat === "pdf" ? "プレゼンテーションからPDFファイルを生成します。" :
+             exportFormat === "html" ? "ブラウザで表示できるスタンドアロンHTMLファイルを生成します。" :
+             "現在のMarkdownコンテンツをファイルとしてダウンロードします。"}
           </p>
         </div>
-
         <DialogFooter>
+           <DialogClose asChild><Button variant="outline">キャンセル</Button></DialogClose>
           <Button onClick={handleExport} disabled={isExporting}>
-            {isExporting ? "Exporting..." : `Export as ${exportFormat.toUpperCase()}`}
+            {isExporting && <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />}
+            {isExporting ? "エクスポート中..." : `${exportFormat.toUpperCase()}としてエクスポート`}
           </Button>
         </DialogFooter>
       </DialogContent>
