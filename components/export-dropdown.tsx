@@ -3,13 +3,13 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog" // DialogClose をインポート
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
-import { downloadFile, generatePDF } from "@/lib/utils"
+import { downloadFile } from "@/lib/utils" // generatePDF は不要
 import { useToast } from "@/hooks/use-toast"
 import { DownloadIcon, Loader2Icon } from "lucide-react"
-import { processMarkdownForRender } from "@/lib/markdown-processor"; // インポート
+import { processMarkdownForRender } from "@/lib/markdown-processor";
 
 interface ExportDropdownProps {
   markdown: string
@@ -19,7 +19,7 @@ interface ExportDropdownProps {
 export function ExportDropdown({ markdown, documentTitle }: ExportDropdownProps) {
   const { toast } = useToast()
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
-  const [exportFormat, setExportFormat] = useState<"pdf" | "html" | "markdown">("pdf")
+  const [exportFormat, setExportFormat] = useState<"html" | "markdown">("html"); // PDF を削除
   const [includeSpeakerNotes, setIncludeSpeakerNotes] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
 
@@ -49,6 +49,7 @@ export function ExportDropdown({ markdown, documentTitle }: ExportDropdownProps)
         return;
       }
 
+      // --- HTML 処理 ---
       const { Marp } = await import("@marp-team/marp-core");
       const marp = new Marp({ html: true, math: true, minifyCSS: false });
       const { html, css } = marp.render(processedMarkdown);
@@ -56,10 +57,8 @@ export function ExportDropdown({ markdown, documentTitle }: ExportDropdownProps)
       if (exportFormat === "html") {
         const fullHTML = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${documentTitle}</title><style>${css}</style></head><body>${html}</body></html>`;
         downloadFile(fullHTML, `${documentTitle}.html`, "text/html");
-      } else if (exportFormat === "pdf") {
-        // generatePDF は HTML を受け取る想定
-        await generatePDF(html, documentTitle);
       }
+      // PDF 処理は削除済み
 
       toast({ title: "成功", description: `${exportFormat.toUpperCase()}としてエクスポートしました` });
       setIsExportDialogOpen(false);
@@ -80,13 +79,13 @@ export function ExportDropdown({ markdown, documentTitle }: ExportDropdownProps)
     <Dialog open={isExportDialogOpen} onOpenChange={setIsExportDialogOpen}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline">
-            <DownloadIcon className="h-4 w-4 mr-2" />
+          <Button variant="outline" size="sm">
+            <DownloadIcon className="h-4 w-4 mr-1" />
             Export
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DialogTrigger asChild><DropdownMenuItem onSelect={() => setExportFormat("pdf")}>PDFとしてエクスポート</DropdownMenuItem></DialogTrigger>
+          {/* PDF メニュー項目削除済み */}
           <DialogTrigger asChild><DropdownMenuItem onSelect={() => setExportFormat("html")}>HTMLとしてエクスポート</DropdownMenuItem></DialogTrigger>
           <DialogTrigger asChild><DropdownMenuItem onSelect={() => setExportFormat("markdown")}>Markdownとしてエクスポート</DropdownMenuItem></DialogTrigger>
         </DropdownMenuContent>
@@ -102,8 +101,8 @@ export function ExportDropdown({ markdown, documentTitle }: ExportDropdownProps)
             <Label htmlFor="speaker-notes" className="text-muted-foreground">スピーカーノートを含める (未対応)</Label>
           </div>
           <p className="text-sm text-muted-foreground">
-            {exportFormat === "pdf" ? "プレゼンテーションからPDFファイルを生成します。" :
-             exportFormat === "html" ? "ブラウザで表示できるスタンドアロンHTMLファイルを生成します。" :
+            {/* PDF の説明削除済み */}
+            {exportFormat === "html" ? "ブラウザで表示できるスタンドアロンHTMLファイルを生成します。" :
              "現在のMarkdownコンテンツをファイルとしてダウンロードします。"}
           </p>
         </div>

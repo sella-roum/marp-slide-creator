@@ -1,292 +1,315 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react" // useCallback を追加
+import React, { useEffect, useState, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Toaster } from "@/components/ui/toaster"
 import { useToast } from "@/hooks/use-toast"
 import {
     initializeDB,
-    getDocuments,
     getDocument,
-    addDocument,
-    updateDocument, // updateDocument をインポート
-    deleteDocument, // deleteDocument をインポート
-    renameDocument, // renameDocument をインポート
+    updateDocument,
 } from "@/lib/db"
 import type { DocumentType } from "@/lib/types"
 import { ChatPane } from "@/components/chat-pane"
 import { EditorPane } from "@/components/editor-pane"
 import { PreviewPane } from "@/components/preview-pane"
-import { PresentationMode } from "@/components/presentation-mode"
+// import { PresentationMode } from "@/components/presentation-mode" // 削除
 import { ExportDropdown } from "@/components/export-dropdown"
-import { DocumentDropdown } from "@/components/document-dropdown" // 新規コンポーネントをインポート
-import { MessageSquareIcon } from "lucide-react"
+import { MessageSquareIcon, CodeIcon, EyeIcon, /* PresentationIcon, */ LayoutIcon, RowsIcon, ColumnsIcon, PanelRightIcon } from "lucide-react" // PresentationIcon を削除
+import { Toggle } from "@/components/ui/toggle"
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable"
+import { Separator } from "@/components/ui/separator"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+
+const SINGLE_DOCUMENT_ID = "main-document";
+type LayoutMode = 'default' | 'horizontal' | 'editor-focused' | 'chat-right';
 
 export default function Home() {
   const { toast } = useToast()
   const [isDbInitialized, setIsDbInitialized] = useState(false)
-  const [documents, setDocuments] = useState<DocumentType[]>([]) // documents state を復活
   const [currentDocument, setCurrentDocument] = useState<DocumentType | null>(null)
   const [markdownContent, setMarkdownContent] = useState("")
-  const [isPresentationMode, setIsPresentationMode] = useState(false)
-  const [rightPaneTab, setRightPaneTab] = useState("editor")
+  // const [isPresentationMode, setIsPresentationMode] = useState(false) // 削除
+  const [isChatVisible, setIsChatVisible] = useState(true);
+  const [isEditorVisible, setIsEditorVisible] = useState(true);
+  const [isPreviewVisible, setIsPreviewVisible] = useState(true);
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>('default');
 
-  // ドキュメントリストを読み込む関数
-  const loadDocuments = useCallback(async (selectDocId?: string) => {
-    if (!isDbInitialized) return; // DB初期化後に実行
-    try {
-      console.log("Loading documents...");
-      const docs = await getDocuments();
-      setDocuments(docs);
-      console.log(`Loaded ${docs.length} documents.`);
-
-      let docToSelect = null;
-
-      if (selectDocId && docs.some(d => d.id === selectDocId)) {
-        // 指定されたIDのドキュメントを選択
-        docToSelect = await getDocument(selectDocId);
-      } else if (docs.length > 0) {
-        // 指定がない場合、または指定IDが見つからない場合は、最後に更新されたドキュメントを選択
-        const sortedDocs = [...docs].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-        docToSelect = await getDocument(sortedDocs[0].id);
-        console.log("Selecting last updated document:", docToSelect?.title);
-      } else {
-        // ドキュメントが1つもない場合は新規作成
-        console.log("No documents found, creating a new one.");
-        const newDocData: Omit<DocumentType, 'id' | 'versions'> = {
-          title: "Untitled Presentation",
-          content: "---\nmarp: true\ntheme: default\n---\n\n# Slide 1\n\n",
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-        const newDocId = await addDocument(newDocData);
-        docToSelect = await getDocument(newDocId);
-        setDocuments([docToSelect!]); // 新規作成後リストを更新
-        toast({ title: "新しいプレゼンテーションを作成しました" });
-        console.log("Created and selected new document:", docToSelect?.title);
-      }
-
-      if (docToSelect && docToSelect.id !== currentDocument?.id) {
-        setCurrentDocument(docToSelect);
-        setMarkdownContent(docToSelect.content);
-        console.log("Current document set to:", docToSelect.title);
-      } else if (!docToSelect) {
-          // ドキュメントが選択できなかった場合（エラーケース）
-          setCurrentDocument(null);
-          setMarkdownContent("");
-          console.warn("No document could be selected.");
-      }
-
-    } catch (error) {
-      console.error("Failed to load or select document:", error);
-      toast({
-        title: "ドキュメントエラー",
-        description: "ドキュメントの読み込みまたは選択に失敗しました。",
-        variant: "destructive",
-      });
-    }
-  }, [isDbInitialized, toast, currentDocument?.id]); // currentDocument.id を依存配列に追加
-
-  // Initialize IndexedDB and load initial documents
+  // DB初期化
   useEffect(() => {
     const initialize = async () => {
       try {
         await initializeDB();
         setIsDbInitialized(true);
-        // DB初期化後にドキュメントを読み込む (loadDocuments が isDbInitialized を見て実行される)
       } catch (error) {
         console.error("Failed to initialize database:", error);
-        toast({
-          title: "Database Error",
-          description: "Failed to initialize the local database.",
-          variant: "destructive",
-        });
+        toast({ title: "DB初期化エラー", variant: "destructive" });
       }
     };
     initialize();
   }, [toast]);
 
-  // isDbInitialized が true になったらドキュメントを読み込む
+  // 単一ドキュメントの読み込み/作成
+  const loadOrCreateSingleDocument = useCallback(async () => {
+    if (!isDbInitialized) return;
+    try {
+      console.log(`Loading document with ID: ${SINGLE_DOCUMENT_ID}`);
+      let doc = await getDocument(SINGLE_DOCUMENT_ID);
+
+      if (!doc) {
+        console.log("Document not found, creating a new one...");
+        const newDocData: DocumentType = {
+          id: SINGLE_DOCUMENT_ID,
+          title: "My Presentation",
+          content: "---\nmarp: true\ntheme: default\n---\n\n# Slide 1\n\n",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        await updateDocument(newDocData); // put 操作で作成
+        doc = await getDocument(SINGLE_DOCUMENT_ID);
+        if (doc) {
+            toast({ title: "新しいプレゼンテーションを作成しました" });
+        } else {
+            throw new Error("Failed to create or retrieve the document after creation attempt.");
+        }
+      }
+
+      if (doc) {
+        if (!currentDocument || doc.content !== currentDocument.content || doc.title !== currentDocument.title) {
+            setCurrentDocument(doc);
+            setMarkdownContent(doc.content);
+            console.log("Document loaded/updated:", doc.title);
+        } else {
+            console.log("Document already up-to-date in state.");
+        }
+      } else {
+          console.error("Failed to load or create the document.");
+          toast({ title: "エラー", description: "ドキュメントの読み込み/作成に失敗", variant: "destructive"});
+      }
+
+    } catch (error) {
+      console.error("Failed to load or create single document:", error);
+      toast({ title: "ドキュメントエラー", variant: "destructive" });
+    }
+  }, [isDbInitialized, toast, currentDocument]);
+
+  // DB初期化後にドキュメント読み込み
   useEffect(() => {
     if (isDbInitialized) {
-      loadDocuments();
+      loadOrCreateSingleDocument();
     }
-  }, [isDbInitialized, loadDocuments]);
+  }, [isDbInitialized, loadOrCreateSingleDocument]);
 
-
-  // Handle document change from dropdown
-  const handleDocumentChange = useCallback(async (doc: DocumentType) => {
-    if (doc && doc.id !== currentDocument?.id) {
-      console.log("Changing document to:", doc.title);
-      // 念のため最新のデータをDBから取得
-      const fullDoc = await getDocument(doc.id);
-      if (fullDoc) {
-          setCurrentDocument(fullDoc);
-          setMarkdownContent(fullDoc.content);
-      } else {
-          console.error(`Failed to get full document data for id: ${doc.id}`);
-          toast({ title: "エラー", description: "ドキュメントの読み込みに失敗しました。", variant: "destructive" });
-          await loadDocuments(); // リストを再読み込み
-      }
-    }
-  }, [currentDocument?.id, toast, loadDocuments]);
-
-  // Handle markdown content change
+  // Markdown 変更ハンドラ
   const handleMarkdownChange = (content: string) => {
     setMarkdownContent(content);
-    // Update current document in state (actual save to DB is debounced in the editor)
-    if (currentDocument) {
-      setCurrentDocument((prevDoc) => prevDoc ? {
-        ...prevDoc,
-        content,
-        updatedAt: new Date(), // UI上の更新日時も更新
-      } : null);
+    setCurrentDocument((prevDoc) => {
+        if (!prevDoc) return null;
+        return { ...prevDoc, content, updatedAt: new Date() };
+    });
+  };
+
+  // プレゼンテーションモード関連削除
+  // const togglePresentationMode = () => { setIsPresentationMode(!isPresentationMode); };
+
+  // カラム表示状態トグル関数
+  const togglePanel = (panel: 'chat' | 'editor' | 'preview') => {
+    switch (panel) {
+      case 'chat': setIsChatVisible(!isChatVisible); break;
+      case 'editor': setIsEditorVisible(!isEditorVisible); break;
+      case 'preview': setIsPreviewVisible(!isPreviewVisible); break;
     }
   };
 
-  // Toggle presentation mode
-  const togglePresentationMode = () => {
-    setIsPresentationMode(!isPresentationMode);
-  };
+  // プレゼンテーションモードの条件分岐削除
+  // if (isPresentationMode && currentDocument) {
+  //   return <PresentationMode markdown={markdownContent} onExit={togglePresentationMode} />;
+  // }
 
-  // Handle creating a new document
-  const handleCreateNewDocument = async () => {
-    try {
-      const newDocData: Omit<DocumentType, 'id' | 'versions'> = {
-        title: `Untitled ${documents.length + 1}`, // シンプルな連番タイトル
-        content: "---\nmarp: true\ntheme: default\n---\n\n# New Slide\n\n",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      const newDocId = await addDocument(newDocData);
-      toast({ title: "新しいドキュメントを作成しました" });
-      await loadDocuments(newDocId); // 新しいドキュメントを選択してリロード
-    } catch (error) {
-      console.error("Failed to create new document:", error);
-      toast({
-        title: "エラー",
-        description: "新しいドキュメントの作成に失敗しました。",
-        variant: "destructive",
-      });
-    }
-  };
+  const visiblePanelsCount = [isChatVisible, isEditorVisible, isPreviewVisible].filter(Boolean).length;
 
-  // Handle renaming a document
-  const handleRenameDocument = async (id: string, newTitle: string) => {
-    try {
-      await renameDocument(id, newTitle);
-      toast({ title: "ドキュメント名を変更しました" });
-      // 現在のドキュメントがリネームされた場合、UIも更新
-      if (currentDocument?.id === id) {
-        setCurrentDocument((prev) => prev ? { ...prev, title: newTitle, updatedAt: new Date() } : null);
-      }
-      await loadDocuments(currentDocument?.id); // リストを更新 (現在の選択を維持)
-    } catch (error) {
-      console.error("Failed to rename document:", error);
-      toast({
-        title: "エラー",
-        description: "ドキュメント名の変更に失敗しました。",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Handle deleting a document
-  const handleDeleteDocument = async (id: string) => {
-    if (documents.length <= 1) {
-        toast({ title: "削除不可", description: "最後のドキュメントは削除できません。", variant: "destructive"});
-        return;
-    }
-    try {
-      await deleteDocument(id);
-      toast({ title: "ドキュメントを削除しました" });
-      // 削除されたのが現在のドキュメントなら、別のドキュメントを選択してリロード
-      if (currentDocument?.id === id) {
-        await loadDocuments(); // 引数なしで最後に更新されたものを選択
-      } else {
-        await loadDocuments(currentDocument?.id); // リストのみ更新
-      }
-    } catch (error) {
-      console.error("Failed to delete document:", error);
-      toast({
-        title: "エラー",
-        description: "ドキュメントの削除に失敗しました。",
-        variant: "destructive",
-      });
-    }
-  };
-
-
-  if (isPresentationMode && currentDocument) {
-    return <PresentationMode markdown={markdownContent} onExit={togglePresentationMode} />;
-  }
-
-  return (
-    <main className="flex flex-col h-screen overflow-hidden">
-      {/* Header */}
-      <header className="flex items-center justify-between p-2 border-b">
-        <div className="flex items-center gap-2"> {/* ドロップダウンとタイトルをグループ化 */}
-            <DocumentDropdown
-                documents={documents}
-                currentDocument={currentDocument}
-                onDocumentChange={handleDocumentChange}
-                onCreateNew={handleCreateNewDocument}
-                onRename={handleRenameDocument}
-                onDelete={handleDeleteDocument}
-            />
-            {/* <h1 className="text-xl font-bold hidden sm:block">AI Marp Creator</h1> */} {/* 必要ならタイトル表示 */}
-        </div>
-        <div className="flex items-center space-x-2">
-          <ExportDropdown markdown={markdownContent} documentTitle={currentDocument?.title || "Untitled"} />
-          <Button variant="outline" onClick={togglePresentationMode} disabled={!currentDocument}>
-            Present
-          </Button>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left Column - Chat Only */}
-        <div className="w-1/3 border-r h-full flex flex-col">
-          <div className="flex items-center p-3 border-b bg-muted">
+  // 各パネルのレンダリング関数
+  const renderChatPanel = () => (
+    isChatVisible && (
+      <ResizablePanel
+        id="chat-panel"
+        order={layoutMode === 'chat-right' ? 2 : 1}
+        collapsible={true}
+        collapsedSize={0}
+        minSize={15}
+        defaultSize={layoutMode === 'horizontal' ? 25 : (layoutMode === 'editor-focused' ? 40 : 25)}
+        className="min-w-[200px] min-h-[100px]"
+      >
+        <div className={`h-full flex flex-col ${layoutMode === 'chat-right' ? 'border-l' : 'border-r'}`}>
+          <div className="flex items-center p-3 border-b bg-muted flex-shrink-0">
             <MessageSquareIcon className="h-4 w-4 mr-2" />
             <h3 className="text-sm font-medium">AI Chat</h3>
           </div>
           <div className="flex-1 overflow-hidden h-full">
             <ChatPane
               currentDocument={currentDocument}
-              onApplyToEditor={(content) => handleMarkdownChange(content)}
+              onApplyToEditor={handleMarkdownChange}
             />
           </div>
         </div>
+      </ResizablePanel>
+    )
+  );
 
-        {/* Right Column - Editor and Preview */}
-        <div className="w-2/3 h-full flex flex-col">
-          <Tabs value={rightPaneTab} onValueChange={setRightPaneTab} className="w-full h-full flex flex-col">
-            <TabsList className="w-full">
-              <TabsTrigger value="editor" className="flex-1">
-                Editor
-              </TabsTrigger>
-              <TabsTrigger value="preview" className="flex-1">
-                Preview
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="editor" className="flex-1 overflow-hidden h-full">
-              <EditorPane
-                markdown={markdownContent}
-                onChange={handleMarkdownChange}
-                currentDocument={currentDocument}
-              />
-            </TabsContent>
-
-            <TabsContent value="preview" className="flex-1 overflow-hidden h-full">
-              <PreviewPane markdown={markdownContent} />
-            </TabsContent>
-          </Tabs>
+  const renderEditorPanel = () => (
+    isEditorVisible && (
+      <ResizablePanel
+        id="editor-panel"
+        order={layoutMode === 'editor-focused' ? 1 : (layoutMode === 'chat-right' ? 1 : 2)}
+        collapsible={true}
+        collapsedSize={0}
+        minSize={15}
+        defaultSize={layoutMode === 'horizontal' ? 40 : 50}
+        className="min-w-[200px] min-h-[100px]"
+      >
+        <div className="h-full flex flex-col">
+          <EditorPane
+            markdown={markdownContent}
+            onChange={handleMarkdownChange}
+            currentDocument={currentDocument}
+          />
         </div>
+      </ResizablePanel>
+    )
+  );
+
+  const renderPreviewPanel = () => (
+    isPreviewVisible && (
+      <ResizablePanel
+        id="preview-panel"
+        order={layoutMode === 'editor-focused' ? 2 : (layoutMode === 'chat-right' ? 2 : 3)}
+        collapsible={true}
+        collapsedSize={0}
+        minSize={15}
+        defaultSize={layoutMode === 'horizontal' ? 35 : (layoutMode === 'editor-focused' ? 60 : 50)}
+        className="min-w-[200px] min-h-[100px]"
+      >
+        <div className="h-full flex flex-col">
+          <PreviewPane markdown={markdownContent} />
+        </div>
+      </ResizablePanel>
+    )
+  );
+
+  // エディタ/プレビューのグループをレンダリングする関数
+  const renderEditorPreviewGroup = (direction: "vertical" | "horizontal", defaultSize: number, order: number) => (
+    (isEditorVisible || isPreviewVisible) && (
+        <ResizablePanel id={`editor-preview-group-${layoutMode}`} order={order} defaultSize={defaultSize} minSize={30}>
+            <ResizablePanelGroup direction={direction}>
+                {renderEditorPanel()}
+                {isEditorVisible && isPreviewVisible && <ResizableHandle withHandle />}
+                {renderPreviewPanel()}
+            </ResizablePanelGroup>
+        </ResizablePanel>
+    )
+  );
+
+
+  return (
+    <main className="flex flex-col h-screen overflow-hidden">
+      {/* Header */}
+      <header className="flex items-center justify-between p-2 border-b flex-shrink-0">
+        <div className="flex items-center gap-2">
+            <h1 className="text-lg font-semibold truncate" title={currentDocument?.title}>
+                {currentDocument?.title || "読み込み中..."}
+            </h1>
+        </div>
+        <div className="flex items-center space-x-1">
+            {/* レイアウト選択ドロップダウン */}
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm">
+                        <LayoutIcon className="h-4 w-4 mr-1" />
+                        Layout
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                    <DropdownMenuLabel>レイアウト選択</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuRadioGroup value={layoutMode} onValueChange={(value) => setLayoutMode(value as LayoutMode)}>
+                        <DropdownMenuRadioItem value="default"><ColumnsIcon className="h-4 w-4 mr-2 opacity-50"/> デフォルト (左チャット)</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="chat-right"><PanelRightIcon className="h-4 w-4 mr-2 opacity-50"/> チャット右配置</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="horizontal"><RowsIcon className="h-4 w-4 mr-2 opacity-50"/> 横3列</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="editor-focused"><RowsIcon className="h-4 w-4 mr-2 opacity-50 rotate-90"/> エディタ重視 (縦積)</DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+            </DropdownMenu>
+
+             <Separator orientation="vertical" className="h-6 mx-1" />
+
+             {/* 表示切り替えトグル */}
+             <Toggle size="sm" pressed={isChatVisible} onPressedChange={() => togglePanel('chat')} aria-label="Toggle Chat Panel" disabled={visiblePanelsCount === 1 && isChatVisible}><MessageSquareIcon className="h-4 w-4" /></Toggle>
+             <Toggle size="sm" pressed={isEditorVisible} onPressedChange={() => togglePanel('editor')} aria-label="Toggle Editor Panel" disabled={visiblePanelsCount === 1 && isEditorVisible}><CodeIcon className="h-4 w-4" /></Toggle>
+             <Toggle size="sm" pressed={isPreviewVisible} onPressedChange={() => togglePanel('preview')} aria-label="Toggle Preview Panel" disabled={visiblePanelsCount === 1 && isPreviewVisible}><EyeIcon className="h-4 w-4" /></Toggle>
+
+             <Separator orientation="vertical" className="h-6 mx-1" />
+
+          {/* エクスポートボタン */}
+          <ExportDropdown markdown={markdownContent} documentTitle={currentDocument?.title || "Untitled"} />
+          {/* Present ボタン削除済み */}
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <div className="flex-1 overflow-hidden border-t">
+        {layoutMode === 'default' && (
+          <ResizablePanelGroup direction="horizontal">
+            {renderChatPanel()}
+            {isChatVisible && (isEditorVisible || isPreviewVisible) && <ResizableHandle withHandle />}
+            {renderEditorPreviewGroup("vertical", isChatVisible ? 75 : 100, 2)}
+          </ResizablePanelGroup>
+        )}
+        {layoutMode === 'chat-right' && (
+          <ResizablePanelGroup direction="horizontal">
+            {renderEditorPreviewGroup("vertical", isChatVisible ? 75 : 100, 1)}
+            {(isEditorVisible || isPreviewVisible) && isChatVisible && <ResizableHandle withHandle />}
+            {renderChatPanel()}
+          </ResizablePanelGroup>
+        )}
+        {layoutMode === 'horizontal' && (
+          <ResizablePanelGroup direction="horizontal">
+            {renderChatPanel()}
+            {isChatVisible && isEditorVisible && <ResizableHandle withHandle />}
+            {renderEditorPanel()}
+            {isEditorVisible && isPreviewVisible && <ResizableHandle withHandle />}
+            {renderPreviewPanel()}
+          </ResizablePanelGroup>
+        )}
+         {layoutMode === 'editor-focused' && (
+            <ResizablePanelGroup direction="vertical">
+                {renderEditorPanel()}
+                {isEditorVisible && (isChatVisible || isPreviewVisible) && <ResizableHandle withHandle />}
+                {(isChatVisible || isPreviewVisible) && (
+                    <ResizablePanel id="chat-preview-group-editor-focused" order={2} defaultSize={isEditorVisible ? 50 : 100} minSize={30}>
+                        <ResizablePanelGroup direction="horizontal">
+                            {renderChatPanel()}
+                            {isChatVisible && isPreviewVisible && <ResizableHandle withHandle />}
+                            {renderPreviewPanel()}
+                        </ResizablePanelGroup>
+                    </ResizablePanel>
+                )}
+            </ResizablePanelGroup>
+         )}
       </div>
+
       <Toaster />
     </main>
   );

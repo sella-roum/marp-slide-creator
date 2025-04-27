@@ -12,7 +12,6 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ImagePlusIcon, TrashIcon, UploadCloudIcon, Loader2Icon, AlertCircleIcon, CheckIcon, CopyIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
