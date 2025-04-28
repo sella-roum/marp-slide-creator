@@ -1,26 +1,29 @@
-import { type ClassValue, clsx } from "clsx"
-import { twMerge } from "tailwind-merge"
+import { type ClassValue, clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
 
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
+  return twMerge(clsx(inputs));
 }
 
 // Debounce function
-export function debounce<T extends (...args: any[]) => any>(func: T, wait: number): (...args: Parameters<T>) => void {
-  let timeout: ReturnType<typeof setTimeout> | null = null
+export function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
 
   return (...args: Parameters<T>) => {
     const later = () => {
-      timeout = null
-      func(...args)
-    }
+      timeout = null;
+      func(...args);
+    };
 
     if (timeout !== null) {
-      clearTimeout(timeout)
+      clearTimeout(timeout);
     }
 
-    timeout = setTimeout(later, wait)
-  }
+    timeout = setTimeout(later, wait);
+  };
 }
 
 // --- extractMarkdownCode 関数を修正 ---
@@ -44,14 +47,14 @@ export function extractMarkdownCode(text: string): string | null {
     //    コードブロックのラベルは任意 (markdown, marp, または無し)
     const fullCodeBlockMatch = extracted.match(/^```(?:markdown|marp)?\s*([\s\S]*?)\s*```$/);
     if (fullCodeBlockMatch && fullCodeBlockMatch[1]) {
-        // コードブロックの中身を返す
-        console.log("Extracted content from full code block.");
-        return fullCodeBlockMatch[1].trim();
+      // コードブロックの中身を返す
+      console.log("Extracted content from full code block.");
+      return fullCodeBlockMatch[1].trim();
     }
 
     // 3. コードブロックで囲まれていない場合は、抽出したテキストをそのまま返す
     //    (ただし、末尾に不要な ``` が残る可能性を考慮して削除)
-    extracted = extracted.replace(/\s*```$/, '').trim(); // 末尾の ``` を削除
+    extracted = extracted.replace(/\s*```$/, "").trim(); // 末尾の ``` を削除
     console.log("Extracted content from Marp start pattern.");
     return extracted;
   }
@@ -69,11 +72,11 @@ export function extractMarkdownCode(text: string): string | null {
   // 5. それでも見つからない場合、ラベルなしを含む最初のコードブロックの中身を試す
   console.log("Specific code block not found, trying any code block...");
   const anyCodeBlockRegex = /```([\s\S]*?)```/; // ラベル問わず最初のブロック
-   const anyMatch = text.match(anyCodeBlockRegex);
-   if (anyMatch && anyMatch[1]) {
-     console.log("Extracted content from any code block.");
-     return anyMatch[1].trim();
-   }
+  const anyMatch = text.match(anyCodeBlockRegex);
+  if (anyMatch && anyMatch[1]) {
+    console.log("Extracted content from any code block.");
+    return anyMatch[1].trim();
+  }
 
   console.log("No Marp content or code block found.");
   return null; // 何も見つからなければ null
@@ -83,26 +86,26 @@ export function extractMarkdownCode(text: string): string | null {
 // Convert local image to Base64
 export function imageToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader()
+    const reader = new FileReader();
 
     reader.onload = () => {
       if (typeof reader.result === "string") {
-        resolve(reader.result)
+        resolve(reader.result);
       } else {
-        reject(new Error("Failed to convert image to Base64"))
+        reject(new Error("Failed to convert image to Base64"));
       }
-    }
+    };
 
-    reader.onerror = () => reject(new Error("Failed to read file"))
+    reader.onerror = () => reject(new Error("Failed to read file"));
 
-    reader.readAsDataURL(file)
-  })
+    reader.readAsDataURL(file);
+  });
 }
 
 // Generate PDF from HTML content
 export async function generatePDF(html: string, title: string): Promise<void> {
-  const printWindow = window.open("", "_blank")
-  if (!printWindow) return
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) return;
 
   printWindow.document.write(`
     <html>
@@ -124,24 +127,24 @@ export async function generatePDF(html: string, title: string): Promise<void> {
         ${html}
       </body>
     </html>
-  `)
+  `);
 
-  printWindow.document.close()
+  printWindow.document.close();
 
   setTimeout(() => {
-    printWindow.print()
-  }, 500)
+    printWindow.print();
+  }, 500);
 }
 
 // Download content as a file
 export function downloadFile(content: string, filename: string, mimeType: string): void {
-  const blob = new Blob([content], { type: mimeType })
-  const url = URL.createObjectURL(blob)
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
 
-  const a = document.createElement("a")
-  a.href = url
-  a.download = filename
-  a.click()
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
 
-  URL.revokeObjectURL(url)
+  URL.revokeObjectURL(url);
 }

@@ -1,6 +1,6 @@
-"use client"
+"use client";
 
-import React, { useState, useEffect, useRef, useCallback } from 'react'; // React をインポート
+import React, { useState, useEffect, useRef, useCallback } from "react"; // React をインポート
 import {
   Dialog,
   DialogContent,
@@ -13,13 +13,21 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ImagePlusIcon, TrashIcon, UploadCloudIcon, Loader2Icon, AlertCircleIcon, CheckIcon, CopyIcon } from "lucide-react";
+import {
+  ImagePlusIcon,
+  TrashIcon,
+  UploadCloudIcon,
+  Loader2Icon,
+  AlertCircleIcon,
+  CheckIcon,
+  CopyIcon,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { ImageType } from "@/lib/types";
 import { addImage, getImages, deleteImage } from "@/lib/db";
 import { useDb } from "@/lib/db-context"; // useDb フックをインポート
 import { imageToBase64 } from "@/lib/utils";
-import Image from 'next/image';
+import Image from "next/image";
 
 interface ImageLibraryProps {
   onInsertReference: (reference: string) => void;
@@ -27,13 +35,12 @@ interface ImageLibraryProps {
 
 // DialogTrigger として使うための forwardRef (変更なし)
 const ImageLibraryTrigger = React.forwardRef<HTMLButtonElement>((props, ref) => (
-    <Button variant="ghost" size="icon" ref={ref} {...props}>
-      <ImagePlusIcon className="h-4 w-4" />
-      <span className="sr-only">画像ライブラリ</span>
-    </Button>
+  <Button variant="ghost" size="icon" ref={ref} {...props}>
+    <ImagePlusIcon className="h-4 w-4" />
+    <span className="sr-only">画像ライブラリ</span>
+  </Button>
 ));
 ImageLibraryTrigger.displayName = "ImageLibraryTrigger";
-
 
 // React.memo でラップ
 export const ImageLibrary = React.memo(({ onInsertReference }: ImageLibraryProps) => {
@@ -49,15 +56,16 @@ export const ImageLibrary = React.memo(({ onInsertReference }: ImageLibraryProps
 
   // ライブラリを開いたときに画像を読み込む (DB初期化チェック追加)
   const loadImages = useCallback(async () => {
-    if (!isDbInitialized) { // DB初期化チェック
-        console.log("ImageLibrary: DB not initialized, skipping image load.");
-        setError("データベースが初期化されていません。");
-        setIsLoading(false);
-        setImages([]);
-        return;
+    if (!isDbInitialized) {
+      // DB初期化チェック
+      console.log("ImageLibrary: DB not initialized, skipping image load.");
+      setError("データベースが初期化されていません。");
+      setIsLoading(false);
+      setImages([]);
+      return;
     }
     // isOpen が true になってから少し待って実行 (Dialog のレンダリング待ち)
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     setIsLoading(true);
     setError(null);
@@ -67,114 +75,154 @@ export const ImageLibrary = React.memo(({ onInsertReference }: ImageLibraryProps
     } catch (err) {
       console.error("Failed to load images:", err);
       setError("画像の読み込みに失敗しました。");
-      toast({ title: "エラー", description: "画像の読み込みに失敗しました。", variant: "destructive" });
+      toast({
+        title: "エラー",
+        description: "画像の読み込みに失敗しました。",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
-  // isDbInitialized を依存配列に追加
+    // isDbInitialized を依存配列に追加
   }, [toast, isDbInitialized]);
 
   // ダイアログの開閉状態が変わったときに画像を読み込む (変更なし)
-  const handleOpenChange = useCallback((open: boolean) => {
+  const handleOpenChange = useCallback(
+    (open: boolean) => {
       setIsOpen(open);
       if (open) {
-          loadImages();
+        loadImages();
       }
-  }, [loadImages]); // loadImages を依存配列に追加
+    },
+    [loadImages]
+  ); // loadImages を依存配列に追加
 
   // 画像アップロード処理 (DB初期化チェック追加)
-  const handleImageUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!isDbInitialized) { // DB初期化チェック
-        toast({ title: "エラー", description: "データベース未初期化のためアップロードできません。", variant: "destructive" });
+  const handleImageUpload = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (!isDbInitialized) {
+        // DB初期化チェック
+        toast({
+          title: "エラー",
+          description: "データベース未初期化のためアップロードできません。",
+          variant: "destructive",
+        });
         return;
-    }
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    setIsUploading(true);
-    const file = files[0];
-
-    try {
-      const dataUrl = await imageToBase64(file);
-      const imageData: Omit<ImageType, 'id' | 'createdAt'> = {
-        name: file.name,
-        dataUrl: dataUrl,
-      };
-      await addImage(imageData);
-      toast({ title: "成功", description: `画像「${file.name}」をアップロードしました。` });
-      await loadImages(); // アップロード後にリストを再読み込み
-    } catch (err) {
-      console.error("Failed to upload image:", err);
-      toast({ title: "エラー", description: "画像のアップロードに失敗しました。", variant: "destructive" });
-    } finally {
-      setIsUploading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
       }
-    }
-  // isDbInitialized, loadImages, toast を依存配列に追加
-  }, [isDbInitialized, loadImages, toast]);
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+
+      setIsUploading(true);
+      const file = files[0];
+
+      try {
+        const dataUrl = await imageToBase64(file);
+        const imageData: Omit<ImageType, "id" | "createdAt"> = {
+          name: file.name,
+          dataUrl: dataUrl,
+        };
+        await addImage(imageData);
+        toast({ title: "成功", description: `画像「${file.name}」をアップロードしました。` });
+        await loadImages(); // アップロード後にリストを再読み込み
+      } catch (err) {
+        console.error("Failed to upload image:", err);
+        toast({
+          title: "エラー",
+          description: "画像のアップロードに失敗しました。",
+          variant: "destructive",
+        });
+      } finally {
+        setIsUploading(false);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+      }
+      // isDbInitialized, loadImages, toast を依存配列に追加
+    },
+    [isDbInitialized, loadImages, toast]
+  );
 
   // 画像削除処理 (DB初期化チェック追加)
-  const handleDeleteImage = useCallback(async (id: string, name: string) => {
-    if (!isDbInitialized) { // DB初期化チェック
-        toast({ title: "エラー", description: "データベース未初期化のため削除できません。", variant: "destructive" });
+  const handleDeleteImage = useCallback(
+    async (id: string, name: string) => {
+      if (!isDbInitialized) {
+        // DB初期化チェック
+        toast({
+          title: "エラー",
+          description: "データベース未初期化のため削除できません。",
+          variant: "destructive",
+        });
         return;
-    }
-    if (!confirm(`画像「${name}」を削除しますか？この操作は元に戻せません。`)) {
+      }
+      if (!confirm(`画像「${name}」を削除しますか？この操作は元に戻せません。`)) {
         return;
-    }
-    try {
-      await deleteImage(id);
-      toast({ title: "成功", description: `画像「${name}」を削除しました。` });
-      setImages(prev => prev.filter(img => img.id !== id));
-    } catch (err) {
-      console.error("Failed to delete image:", err);
-      toast({ title: "エラー", description: "画像の削除に失敗しました。", variant: "destructive" });
-    }
-  // isDbInitialized, toast を依存配列に追加
-  }, [isDbInitialized, toast]);
+      }
+      try {
+        await deleteImage(id);
+        toast({ title: "成功", description: `画像「${name}」を削除しました。` });
+        setImages((prev) => prev.filter((img) => img.id !== id));
+      } catch (err) {
+        console.error("Failed to delete image:", err);
+        toast({
+          title: "エラー",
+          description: "画像の削除に失敗しました。",
+          variant: "destructive",
+        });
+      }
+      // isDbInitialized, toast を依存配列に追加
+    },
+    [isDbInitialized, toast]
+  );
 
   // 参照文字列を挿入 (変更なし)
-  const handleInsertClick = useCallback((image: ImageType) => {
-    const reference = `![${image.name}](image://${image.id})`;
-    onInsertReference(reference);
-    handleOpenChange(false); // ダイアログを閉じる
-    toast({ title: "画像参照を挿入しました", description: reference });
-  }, [onInsertReference, handleOpenChange, toast]); // 依存配列に onInsertReference, handleOpenChange, toast を追加
+  const handleInsertClick = useCallback(
+    (image: ImageType) => {
+      const reference = `![${image.name}](image://${image.id})`;
+      onInsertReference(reference);
+      handleOpenChange(false); // ダイアログを閉じる
+      toast({ title: "画像参照を挿入しました", description: reference });
+    },
+    [onInsertReference, handleOpenChange, toast]
+  ); // 依存配列に onInsertReference, handleOpenChange, toast を追加
 
-   // 参照文字列をコピー (変更なし)
-   const handleCopyReference = useCallback((image: ImageType) => {
-    const reference = `![${image.name}](image://${image.id})`;
-    navigator.clipboard.writeText(reference).then(() => {
-      setCopiedStates((prev) => ({ ...prev, [image.id]: true }));
-      toast({ title: "参照文字列をコピーしました" });
-      setTimeout(() => {
-        setCopiedStates((prev) => ({ ...prev, [image.id]: false }));
-      }, 2000);
-    }).catch(err => {
-      console.error('コピー失敗:', err);
-      toast({ title: "コピーに失敗しました", variant: "destructive" });
-    });
-  }, [toast]); // 依存配列に toast を追加
-
+  // 参照文字列をコピー (変更なし)
+  const handleCopyReference = useCallback(
+    (image: ImageType) => {
+      const reference = `![${image.name}](image://${image.id})`;
+      navigator.clipboard
+        .writeText(reference)
+        .then(() => {
+          setCopiedStates((prev) => ({ ...prev, [image.id]: true }));
+          toast({ title: "参照文字列をコピーしました" });
+          setTimeout(() => {
+            setCopiedStates((prev) => ({ ...prev, [image.id]: false }));
+          }, 2000);
+        })
+        .catch((err) => {
+          console.error("コピー失敗:", err);
+          toast({ title: "コピーに失敗しました", variant: "destructive" });
+        });
+    },
+    [toast]
+  ); // 依存配列に toast を追加
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <ImageLibraryTrigger />
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[80vw] md:max-w-[60vw] lg:max-w-[50vw] h-[80vh] flex flex-col p-0">
-        <DialogHeader className="p-6 pb-4 border-b">
+      <DialogContent className="flex h-[80vh] flex-col p-0 sm:max-w-[80vw] md:max-w-[60vw] lg:max-w-[50vw]">
+        <DialogHeader className="border-b p-6 pb-4">
           <DialogTitle>画像ライブラリ</DialogTitle>
-          <DialogDescription>
-            アップロード済みの画像を表示・管理します。
-          </DialogDescription>
+          <DialogDescription>アップロード済みの画像を表示・管理します。</DialogDescription>
         </DialogHeader>
 
         {/* アップロードボタン */}
-        <div className="px-6 pt-4 flex-shrink-0">
-          <Button onClick={() => fileInputRef.current?.click()} disabled={isUploading || !isDbInitialized}>
+        <div className="flex-shrink-0 px-6 pt-4">
+          <Button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading || !isDbInitialized}
+          >
             {isUploading ? (
               <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
             ) : (
@@ -193,52 +241,86 @@ export const ImageLibrary = React.memo(({ onInsertReference }: ImageLibraryProps
         </div>
 
         {/* 画像リスト */}
-        <ScrollArea className="flex-1 my-0 border-y">
+        <ScrollArea className="my-0 flex-1 border-y">
           <div className="p-6">
             {isLoading && (
-              <div className="flex justify-center items-center py-10">
+              <div className="flex items-center justify-center py-10">
                 <Loader2Icon className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
             )}
             {error && (
               <div className="flex flex-col items-center justify-center py-10 text-destructive">
-                <AlertCircleIcon className="w-8 h-8 mb-2" />
+                <AlertCircleIcon className="mb-2 h-8 w-8" />
                 <p>{error}</p>
-                {isDbInitialized && <Button variant="outline" size="sm" onClick={loadImages} className="mt-4">再試行</Button>}
+                {isDbInitialized && (
+                  <Button variant="outline" size="sm" onClick={loadImages} className="mt-4">
+                    再試行
+                  </Button>
+                )}
               </div>
             )}
             {!isLoading && !error && images.length === 0 && (
-              <div className="text-center text-muted-foreground py-10">
-                {isDbInitialized ? "アップロードされた画像はありません。" : "データベース初期化中..."}
+              <div className="py-10 text-center text-muted-foreground">
+                {isDbInitialized
+                  ? "アップロードされた画像はありません。"
+                  : "データベース初期化中..."}
               </div>
             )}
             {!isLoading && !error && images.length > 0 && (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
                 {images.map((image) => (
-                  <div key={image.id} className="border rounded-md overflow-hidden group relative flex flex-col shadow-sm hover:shadow-md transition-shadow">
-                    <div className="aspect-square w-full relative bg-muted flex items-center justify-center">
+                  <div
+                    key={image.id}
+                    className="group relative flex flex-col overflow-hidden rounded-md border shadow-sm transition-shadow hover:shadow-md"
+                  >
+                    <div className="relative flex aspect-square w-full items-center justify-center bg-muted">
                       <Image
                         src={image.dataUrl}
                         alt={image.name}
                         layout="fill"
                         objectFit="contain"
-                        className="group-hover:opacity-75 transition-opacity"
+                        className="transition-opacity group-hover:opacity-75"
                         unoptimized // Base64画像なので最適化不要
                       />
-                       <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 p-1">
-                           <Button size="sm" className="text-xs h-7 w-full bg-primary/80 hover:bg-primary" onClick={() => handleInsertClick(image)}>挿入</Button>
-                           <Button size="sm" variant="secondary" className="text-xs h-7 w-full bg-secondary/80 hover:bg-secondary" onClick={() => handleCopyReference(image)}>
-                             {copiedStates[image.id] ? <CheckIcon className="w-3 h-3 mr-1"/> : <CopyIcon className="w-3 h-3 mr-1"/>}
-                             参照コピー
-                           </Button>
-                           <Button size="sm" variant="destructive" className="text-xs h-7 w-full bg-destructive/80 hover:bg-destructive" onClick={() => handleDeleteImage(image.id, image.name)}>
-                             <TrashIcon className="w-3 h-3 mr-1"/>削除
-                           </Button>
-                       </div>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/60 p-1 opacity-0 transition-opacity group-hover:opacity-100">
+                        <Button
+                          size="sm"
+                          className="h-7 w-full bg-primary/80 text-xs hover:bg-primary"
+                          onClick={() => handleInsertClick(image)}
+                        >
+                          挿入
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="h-7 w-full bg-secondary/80 text-xs hover:bg-secondary"
+                          onClick={() => handleCopyReference(image)}
+                        >
+                          {copiedStates[image.id] ? (
+                            <CheckIcon className="mr-1 h-3 w-3" />
+                          ) : (
+                            <CopyIcon className="mr-1 h-3 w-3" />
+                          )}
+                          参照コピー
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          className="h-7 w-full bg-destructive/80 text-xs hover:bg-destructive"
+                          onClick={() => handleDeleteImage(image.id, image.name)}
+                        >
+                          <TrashIcon className="mr-1 h-3 w-3" />
+                          削除
+                        </Button>
+                      </div>
                     </div>
-                    <div className="p-2 text-xs bg-background flex-shrink-0">
-                      <p className="truncate font-medium" title={image.name}>{image.name}</p>
-                      <p className="text-muted-foreground">{new Date(image.createdAt).toLocaleDateString('ja-JP')}</p>
+                    <div className="flex-shrink-0 bg-background p-2 text-xs">
+                      <p className="truncate font-medium" title={image.name}>
+                        {image.name}
+                      </p>
+                      <p className="text-muted-foreground">
+                        {new Date(image.createdAt).toLocaleDateString("ja-JP")}
+                      </p>
                     </div>
                   </div>
                 ))}
@@ -247,9 +329,11 @@ export const ImageLibrary = React.memo(({ onInsertReference }: ImageLibraryProps
           </div>
         </ScrollArea>
 
-        <DialogFooter className="p-6 pt-4 border-t flex-shrink-0">
+        <DialogFooter className="flex-shrink-0 border-t p-6 pt-4">
           <DialogClose asChild>
-            <Button type="button" variant="outline">閉じる</Button>
+            <Button type="button" variant="outline">
+              閉じる
+            </Button>
           </DialogClose>
         </DialogFooter>
       </DialogContent>
@@ -257,4 +341,4 @@ export const ImageLibrary = React.memo(({ onInsertReference }: ImageLibraryProps
   );
 });
 
-ImageLibrary.displayName = 'ImageLibrary'; // displayName を設定
+ImageLibrary.displayName = "ImageLibrary"; // displayName を設定

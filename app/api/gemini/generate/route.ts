@@ -55,9 +55,10 @@ export async function POST(request: NextRequest) {
     // --- システムプロンプトの構築 ---
     // systemInstruction に渡すため、Content オブジェクト形式にする
     const systemInstructionContent: Content = {
-        role: "system", // またはモデルによっては "user" の最初のターンとして扱う
-        parts: [{
-            text: `You are an AI assistant specialized in helping users create Marp presentations.
+      role: "system", // またはモデルによっては "user" の最初のターンとして扱う
+      parts: [
+        {
+          text: `You are an AI assistant specialized in helping users create Marp presentations.
 Marp is a Markdown-based presentation tool.
 
 When responding:
@@ -72,13 +73,14 @@ Current user's Markdown content:
 \`\`\`
 ${context?.currentMarkdown || "No content yet"}
 \`\`\`
-` // context が undefined の可能性を考慮
-        }]
+`, // context が undefined の可能性を考慮
+        },
+      ],
     };
 
     // タスク固有の指示をシステムプロンプトに追加
     let taskInstruction = "";
-     if (taskType) {
+    if (taskType) {
       switch (taskType) {
         case "GenerateOutline":
           taskInstruction = `\nFocus on creating a well-structured presentation outline with appropriate sections and slide transitions.`;
@@ -92,41 +94,38 @@ ${context?.currentMarkdown || "No content yet"}
       }
       // systemInstructionContent の parts[0].text に追記
       if (systemInstructionContent.parts && systemInstructionContent.parts[0].text) {
-          systemInstructionContent.parts[0].text += taskInstruction;
+        systemInstructionContent.parts[0].text += taskInstruction;
       }
     }
     // --- システムプロンプト構築ここまで ---
 
-
     // --- ユーザープロンプトの準備 ---
     const userContent: Content = {
-        role: "user",
-        parts: [{ text: prompt }]
+      role: "user",
+      parts: [{ text: prompt }],
     };
     // --- ユーザープロンプト準備ここまで ---
-
 
     try {
       // --- generateContent の呼び出し修正 ---
       const generationConfig: GenerateContentConfig = {
-          // 必要に応じて temperature, topK, topP などを設定
-          // responseMimeType: "application/json", // 必要ならJSON出力を指定
-          // safetySettings: [...] // 必要ならセーフティ設定
+        // 必要に応じて temperature, topK, topP などを設定
+        // responseMimeType: "application/json", // 必要ならJSON出力を指定
+        // safetySettings: [...] // 必要ならセーフティ設定
       };
 
       const response: GenerateContentResponse = await ai.models.generateContent({
-        model: 'gemini-2.0-flash', // モデル名 (必要なら変更)
+        model: "gemini-2.0-flash", // モデル名 (必要なら変更)
         // systemInstruction を config に渡す (推奨)
         // または contents の最初に role: "system" で渡す (モデルによる)
         // 今回は systemInstruction を使用しない例として、contents に含める
         contents: [userContent], // ユーザープロンプトのみを渡す
         config: {
-            ...generationConfig,
-            systemInstruction: systemInstructionContent // systemInstruction を config に設定
-        }
+          ...generationConfig,
+          systemInstruction: systemInstructionContent, // systemInstruction を config に設定
+        },
       });
       // --- 呼び出し修正ここまで ---
-
 
       // --- レスポンス処理の修正 ---
       const resultText = response.text; // .text アクセサを使用
@@ -149,19 +148,23 @@ ${context?.currentMarkdown || "No content yet"}
             { status: 400 } // Bad Request が適切か
           );
         }
-         // candidates が空、または content がない場合も考慮
-        if (!response.candidates || response.candidates.length === 0 || !response.candidates[0].content) {
-             console.error("モデルから有効なコンテンツが得られませんでした。");
-             return NextResponse.json(
-                {
-                    success: false,
-                    error: {
-                        message: "AI model did not return valid content.",
-                        code: "NO_VALID_CONTENT",
-                    },
-                } as GeminiResponseType,
-                { status: 500 }
-            );
+        // candidates が空、または content がない場合も考慮
+        if (
+          !response.candidates ||
+          response.candidates.length === 0 ||
+          !response.candidates[0].content
+        ) {
+          console.error("モデルから有効なコンテンツが得られませんでした。");
+          return NextResponse.json(
+            {
+              success: false,
+              error: {
+                message: "AI model did not return valid content.",
+                code: "NO_VALID_CONTENT",
+              },
+            } as GeminiResponseType,
+            { status: 500 }
+          );
         }
         // その他の理由で空の場合
         return NextResponse.json(
@@ -177,7 +180,6 @@ ${context?.currentMarkdown || "No content yet"}
       }
       // --- レスポンス処理修正ここまで ---
 
-
       // Extract markdown code if present
       const markdownCode = extractMarkdownCode(resultText); // resultText を渡す
 
@@ -189,12 +191,11 @@ ${context?.currentMarkdown || "No content yet"}
           markdownCode,
         },
       } as GeminiResponseType);
-
     } catch (genaiError) {
       console.error("Gemini API error:", genaiError);
       // エラーオブジェクトの詳細を出力
       if (genaiError instanceof Error) {
-          console.error("API Error Details:", JSON.stringify(genaiError, null, 2));
+        console.error("API Error Details:", JSON.stringify(genaiError, null, 2));
       }
 
       return NextResponse.json(
@@ -204,7 +205,7 @@ ${context?.currentMarkdown || "No content yet"}
             message: genaiError instanceof Error ? genaiError.message : "Gemini API error",
             code: "GEMINI_API_ERROR",
             // 可能であればエラーの詳細を追加
-            details: genaiError instanceof Error ? JSON.stringify(genaiError) : undefined
+            details: genaiError instanceof Error ? JSON.stringify(genaiError) : undefined,
           },
         } as GeminiResponseType,
         { status: 500 } // APIエラーは 500 Internal Server Error または 502 Bad Gateway が適切か

@@ -1,6 +1,6 @@
-"use client"
+"use client";
 
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -86,20 +86,22 @@ export function DocumentDropdown({
         setSelectedDocForDelete(null);
       } catch (error) {
         console.error("Delete failed:", error);
-         // エラー表示 (Toastなど)
+        // エラー表示 (Toastなど)
       }
     }
   };
 
   // ドキュメントリストを更新日時の降順でソート
-  const sortedDocuments = [...documents].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+  const sortedDocuments = [...documents].sort(
+    (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()
+  );
 
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" className="min-w-[150px] justify-between">
-            <span className="truncate max-w-[120px]">
+            <span className="max-w-[120px] truncate">
               {currentDocument ? currentDocument.title : "ドキュメント選択"}
             </span>
             <ChevronDownIcon className="h-4 w-4 opacity-50" />
@@ -117,10 +119,10 @@ export function DocumentDropdown({
             {sortedDocuments.length > 0 ? (
               sortedDocuments.map((doc) => (
                 <DropdownMenuSub key={doc.id}>
-                   <DropdownMenuSubTrigger
-                     className={`justify-between ${currentDocument?.id === doc.id ? 'bg-accent' : ''}`}
-                     onClick={() => onDocumentChange(doc)} // クリックで選択
-                   >
+                  <DropdownMenuSubTrigger
+                    className={`justify-between ${currentDocument?.id === doc.id ? "bg-accent" : ""}`}
+                    onClick={() => onDocumentChange(doc)} // クリックで選択
+                  >
                     <span className="truncate">{doc.title}</span>
                     {/* サブメニューを開くアイコンはデフォルトで表示される */}
                   </DropdownMenuSubTrigger>
@@ -136,7 +138,7 @@ export function DocumentDropdown({
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => handleDeleteClick(doc)}
-                        className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                        className="text-destructive focus:bg-destructive/10 focus:text-destructive"
                         disabled={documents.length <= 1} // 最後の1つは消せないようにする
                       >
                         <TrashIcon className="mr-2 h-4 w-4" />
@@ -158,9 +160,7 @@ export function DocumentDropdown({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>ドキュメント名の変更</DialogTitle>
-            <DialogDescription>
-              新しいドキュメント名を入力してください。
-            </DialogDescription>
+            <DialogDescription>新しいドキュメント名を入力してください。</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
@@ -172,15 +172,19 @@ export function DocumentDropdown({
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
                 className="col-span-3"
-                onKeyDown={(e) => e.key === 'Enter' && handleRenameSubmit()}
+                onKeyDown={(e) => e.key === "Enter" && handleRenameSubmit()}
               />
             </div>
           </div>
           <DialogFooter>
-             <DialogClose asChild>
-                <Button type="button" variant="outline">キャンセル</Button>
-             </DialogClose>
-            <Button type="submit" onClick={handleRenameSubmit} disabled={!newTitle.trim()}>変更</Button>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">
+                キャンセル
+              </Button>
+            </DialogClose>
+            <Button type="submit" onClick={handleRenameSubmit} disabled={!newTitle.trim()}>
+              変更
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -191,14 +195,19 @@ export function DocumentDropdown({
           <DialogHeader>
             <DialogTitle>ドキュメントの削除</DialogTitle>
             <DialogDescription>
-              ドキュメント「{selectedDocForDelete?.title}」を削除しますか？この操作は元に戻せません。関連するチャット履歴も削除されます。
+              ドキュメント「{selectedDocForDelete?.title}
+              」を削除しますか？この操作は元に戻せません。関連するチャット履歴も削除されます。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-             <DialogClose asChild>
-                <Button type="button" variant="outline">キャンセル</Button>
-             </DialogClose>
-            <Button type="button" variant="destructive" onClick={handleDeleteConfirm}>削除</Button>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">
+                キャンセル
+              </Button>
+            </DialogClose>
+            <Button type="button" variant="destructive" onClick={handleDeleteConfirm}>
+              削除
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -1,46 +1,46 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { XIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react"
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { XIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 
 interface PresentationModeProps {
-  markdown: string
-  onExit: () => void
+  markdown: string;
+  onExit: () => void;
 }
 
 export function PresentationMode({ markdown, onExit }: PresentationModeProps) {
-  const [currentSlide, setCurrentSlide] = useState(0)
-  const [totalSlides, setTotalSlides] = useState(0)
-  const [renderedHTML, setRenderedHTML] = useState("")
-  const [isLoading, setIsLoading] = useState(true)
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const [totalSlides, setTotalSlides] = useState(0);
+  const [renderedHTML, setRenderedHTML] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
 
   // Initialize Marp and render markdown
   useEffect(() => {
     const initializeAndRender = async () => {
       try {
         // Import Marp dynamically
-        const { Marp } = await import("@marp-team/marp-core")
+        const { Marp } = await import("@marp-team/marp-core");
 
         // Create Marp instance
         const marp = new Marp({
           html: true,
           math: true,
           minifyCSS: false,
-        })
+        });
 
         // Add Marp directives if not present
-        let processedMarkdown = markdown
+        let processedMarkdown = markdown;
         if (!markdown.includes("marp: true")) {
-          processedMarkdown = `---\nmarp: true\n---\n\n${markdown}`
+          processedMarkdown = `---\nmarp: true\n---\n\n${markdown}`;
         }
 
         // Render markdown to HTML
-        const { html, css } = marp.render(processedMarkdown)
+        const { html, css } = marp.render(processedMarkdown);
 
         // Count slides
-        const slideCount = (html.match(/<section/g) || []).length
-        setTotalSlides(slideCount)
+        const slideCount = (html.match(/<section/g) || []).length;
+        setTotalSlides(slideCount);
 
         // Combine HTML and CSS
         const fullHTML = `
@@ -59,74 +59,74 @@ export function PresentationMode({ markdown, onExit }: PresentationModeProps) {
               </div>
             </body>
           </html>
-        `
+        `;
 
-        setRenderedHTML(fullHTML)
-        setIsLoading(false)
+        setRenderedHTML(fullHTML);
+        setIsLoading(false);
       } catch (error) {
-        console.error("Failed to render presentation:", error)
-        setIsLoading(false)
+        console.error("Failed to render presentation:", error);
+        setIsLoading(false);
       }
-    }
+    };
 
-    initializeAndRender()
+    initializeAndRender();
 
     // Add keyboard event listeners
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "ArrowRight" || e.key === " " || e.key === "PageDown") {
-        goToNextSlide()
+        goToNextSlide();
       } else if (e.key === "ArrowLeft" || e.key === "PageUp") {
-        goToPrevSlide()
+        goToPrevSlide();
       } else if (e.key === "Escape") {
-        onExit()
+        onExit();
       }
-    }
+    };
 
-    window.addEventListener("keydown", handleKeyDown)
+    window.addEventListener("keydown", handleKeyDown);
 
     return () => {
-      window.removeEventListener("keydown", handleKeyDown)
-    }
-  }, [markdown, onExit])
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [markdown, onExit]);
 
   // Navigate between slides
   const goToNextSlide = () => {
     if (currentSlide < totalSlides - 1) {
-      setCurrentSlide(currentSlide + 1)
+      setCurrentSlide(currentSlide + 1);
     }
-  }
+  };
 
   const goToPrevSlide = () => {
     if (currentSlide > 0) {
-      setCurrentSlide(currentSlide - 1)
+      setCurrentSlide(currentSlide - 1);
     }
-  }
+  };
 
   return (
-    <div className="fixed inset-0 bg-black z-50 flex flex-col">
-      <div className="absolute top-4 right-4 z-10">
+    <div className="fixed inset-0 z-50 flex flex-col bg-black">
+      <div className="absolute right-4 top-4 z-10">
         <Button
           variant="outline"
           size="icon"
           onClick={onExit}
-          className="bg-black/50 hover:bg-black/70 text-white border-white/20"
+          className="border-white/20 bg-black/50 text-white hover:bg-black/70"
         >
           <XIcon className="h-4 w-4" />
         </Button>
       </div>
 
-      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-10 flex items-center space-x-4">
+      <div className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 transform items-center space-x-4">
         <Button
           variant="outline"
           size="icon"
           onClick={goToPrevSlide}
           disabled={currentSlide === 0}
-          className="bg-black/50 hover:bg-black/70 text-white border-white/20"
+          className="border-white/20 bg-black/50 text-white hover:bg-black/70"
         >
           <ChevronLeftIcon className="h-4 w-4" />
         </Button>
 
-        <span className="text-white bg-black/50 px-3 py-1 rounded text-sm">
+        <span className="rounded bg-black/50 px-3 py-1 text-sm text-white">
           {totalSlides > 0 ? `${currentSlide + 1}/${totalSlides}` : "0/0"}
         </span>
 
@@ -135,7 +135,7 @@ export function PresentationMode({ markdown, onExit }: PresentationModeProps) {
           size="icon"
           onClick={goToNextSlide}
           disabled={currentSlide === totalSlides - 1}
-          className="bg-black/50 hover:bg-black/70 text-white border-white/20"
+          className="border-white/20 bg-black/50 text-white hover:bg-black/70"
         >
           <ChevronRightIcon className="h-4 w-4" />
         </Button>
@@ -143,13 +143,13 @@ export function PresentationMode({ markdown, onExit }: PresentationModeProps) {
 
       <div className="flex-1 overflow-hidden">
         {isLoading ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
+          <div className="flex h-full items-center justify-center">
+            <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-white"></div>
           </div>
         ) : (
           <iframe
             srcDoc={renderedHTML}
-            className="w-full h-full border-0"
+            className="h-full w-full border-0"
             style={{
               transform: `translateY(${-100 * currentSlide}vh)`,
             }}
@@ -158,5 +158,5 @@ export function PresentationMode({ markdown, onExit }: PresentationModeProps) {
         )}
       </div>
     </div>
-  )
+  );
 }

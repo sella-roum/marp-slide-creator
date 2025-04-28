@@ -1,10 +1,10 @@
 // VersionType と TemplateType を削除
 export interface DocumentType {
-  id: string
-  title: string
-  content: string
-  createdAt: Date
-  updatedAt: Date
+  id: string;
+  title: string;
+  content: string;
+  createdAt: Date;
+  updatedAt: Date;
   // versions プロパティ削除
 }
 
@@ -15,12 +15,12 @@ export interface DocumentType {
 // export interface TemplateType { ... }
 
 export interface ChatMessageType {
-  id: string
-  documentId: string
-  role: "user" | "assistant" | "system"
-  content: string
-  timestamp: Date
-  markdownCode?: string | null
+  id: string;
+  documentId: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  timestamp: Date;
+  markdownCode?: string | null;
 }
 
 export interface ImageType {
@@ -31,22 +31,22 @@ export interface ImageType {
 }
 
 export interface GeminiRequestType {
-  prompt: string
+  prompt: string;
   context: {
-    currentMarkdown: string
-    selection?: string
-  }
-  taskType?: string
+    currentMarkdown: string;
+    selection?: string;
+  };
+  taskType?: string;
 }
 
 export interface GeminiResponseType {
-  success: boolean
+  success: boolean;
   result?: {
-    text: string
-    markdownCode: string | null
-  }
+    text: string;
+    markdownCode: string | null;
+  };
   error?: {
-    message: string
-    code: string
-  }
+    message: string;
+    code: string;
+  };
 }

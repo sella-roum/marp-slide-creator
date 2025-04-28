@@ -1,13 +1,13 @@
-"use client"
+"use client";
 
-import React, { useState, useEffect, useRef, useCallback } from 'react'; // React と useCallback をインポート
-import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import type { DocumentType } from "@/lib/types"
-import { updateDocument } from "@/lib/db"
-import { debounce } from "@/lib/utils"
-import { useToast } from "@/hooks/use-toast"
+import React, { useState, useEffect, useRef, useCallback } from "react"; // React と useCallback をインポート
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import type { DocumentType } from "@/lib/types";
+import { updateDocument } from "@/lib/db";
+import { debounce } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 import { useDb } from "@/lib/db-context"; // useDb フックをインポート
 import {
   LinkIcon,
@@ -21,50 +21,62 @@ import {
   SeparatorHorizontalIcon,
   FileIcon,
   ImagePlusIcon,
-} from "lucide-react"
-import { ImageLibrary } from "./image-library"
+} from "lucide-react";
+import { ImageLibrary } from "./image-library";
 
 interface EditorPaneProps {
-  markdown: string
-  onChange: (content: string) => void
-  currentDocument: DocumentType | null
+  markdown: string;
+  onChange: (content: string) => void;
+  currentDocument: DocumentType | null;
 }
 
 // React.memo でラップ
 export const EditorPane = React.memo(({ markdown, onChange, currentDocument }: EditorPaneProps) => {
-  const { toast } = useToast()
+  const { toast } = useToast();
   const { isDbInitialized } = useDb(); // DB初期化状態を取得
-  const [isSaving, setIsSaving] = useState(false)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [isSaving, setIsSaving] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Insert text at cursor position (useCallback でメモ化)
-  const insertTextAtCursor = useCallback((textBefore: string, textAfter = "") => {
-    if (!textareaRef.current) return;
-    const textarea = textareaRef.current;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selectedText = textarea.value.substring(start, end);
-    const newText = textarea.value.substring(0, start) + textBefore + selectedText + textAfter + textarea.value.substring(end);
-    onChange(newText); // onChange は props なので依存配列に追加
-    // フォーカスとカーソル位置設定は setTimeout 内なのでメモ化の影響は限定的
-    setTimeout(() => {
-      if (textareaRef.current) {
-        textareaRef.current.focus();
-        const newCursorPos = start + textBefore.length + (selectedText ? selectedText.length : 0);
-        textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
-      }
-    }, 0);
-  }, [onChange]); // onChange を依存配列に追加
+  const insertTextAtCursor = useCallback(
+    (textBefore: string, textAfter = "") => {
+      if (!textareaRef.current) return;
+      const textarea = textareaRef.current;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const selectedText = textarea.value.substring(start, end);
+      const newText =
+        textarea.value.substring(0, start) +
+        textBefore +
+        selectedText +
+        textAfter +
+        textarea.value.substring(end);
+      onChange(newText); // onChange は props なので依存配列に追加
+      // フォーカスとカーソル位置設定は setTimeout 内なのでメモ化の影響は限定的
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          const newCursorPos = start + textBefore.length + (selectedText ? selectedText.length : 0);
+          textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+        }
+      }, 0);
+    },
+    [onChange]
+  ); // onChange を依存配列に追加
 
   // 画像参照を挿入する関数 (useCallback でメモ化)
-  const handleInsertImageReference = useCallback((reference: string) => {
-    insertTextAtCursor(reference);
-  }, [insertTextAtCursor]); // insertTextAtCursor を依存配列に追加
+  const handleInsertImageReference = useCallback(
+    (reference: string) => {
+      insertTextAtCursor(reference);
+    },
+    [insertTextAtCursor]
+  ); // insertTextAtCursor を依存配列に追加
 
   // Save document with debounce (DB初期化チェック追加)
   const debouncedSave = useRef(
     debounce(async (documentData: DocumentType) => {
-      if (!isDbInitialized) { // DB初期化チェック
+      if (!isDbInitialized) {
+        // DB初期化チェック
         console.warn("EditorPane: DB not initialized, skipping save.");
         return;
       }
@@ -91,70 +103,174 @@ export const EditorPane = React.memo(({ markdown, onChange, currentDocument }: E
       };
       debouncedSave(docToSave);
     }
-  // isDbInitialized を依存配列に追加
+    // isDbInitialized を依存配列に追加
   }, [markdown, currentDocument, debouncedSave, isDbInitialized]);
 
-
   // Handle toolbar actions (useCallback でメモ化)
-  const handleToolbarAction = useCallback((action: string) => {
-    switch (action) {
-      case "h1": insertTextAtCursor("# "); break;
-      case "h2": insertTextAtCursor("## "); break;
-      case "bold": insertTextAtCursor("**", "**"); break;
-      case "italic": insertTextAtCursor("*", "*"); break;
-      case "link": insertTextAtCursor("[", "](https://)"); break;
-      case "code": insertTextAtCursor("```\n", "\n```"); break;
-      case "list": insertTextAtCursor("- "); break;
-      case "quote": insertTextAtCursor("> "); break;
-      case "hr": insertTextAtCursor("\n---\n"); break;
-      case "marp-directive": insertTextAtCursor("---\nmarp: true\ntheme: default\npaginate: true\n---\n\n"); break;
-      case "image-url":
-        const url = prompt("画像URLを入力してください:");
-        if (url) insertTextAtCursor(`![画像](${url})`);
-        break;
-      default: break;
-    }
-  }, [insertTextAtCursor]); // insertTextAtCursor を依存配列に追加
+  const handleToolbarAction = useCallback(
+    (action: string) => {
+      switch (action) {
+        case "h1":
+          insertTextAtCursor("# ");
+          break;
+        case "h2":
+          insertTextAtCursor("## ");
+          break;
+        case "bold":
+          insertTextAtCursor("**", "**");
+          break;
+        case "italic":
+          insertTextAtCursor("*", "*");
+          break;
+        case "link":
+          insertTextAtCursor("[", "](https://)");
+          break;
+        case "code":
+          insertTextAtCursor("```\n", "\n```");
+          break;
+        case "list":
+          insertTextAtCursor("- ");
+          break;
+        case "quote":
+          insertTextAtCursor("> ");
+          break;
+        case "hr":
+          insertTextAtCursor("\n---\n");
+          break;
+        case "marp-directive":
+          insertTextAtCursor("---\nmarp: true\ntheme: default\npaginate: true\n---\n\n");
+          break;
+        case "image-url":
+          const url = prompt("画像URLを入力してください:");
+          if (url) insertTextAtCursor(`![画像](${url})`);
+          break;
+        default:
+          break;
+      }
+    },
+    [insertTextAtCursor]
+  ); // insertTextAtCursor を依存配列に追加
 
   // Render
   if (!currentDocument) {
     return (
-      <div className="flex flex-col items-center justify-center h-full p-4 text-center text-muted-foreground">
-        <FileIcon className="h-12 w-12 mb-4 opacity-50" />
+      <div className="flex h-full flex-col items-center justify-center p-4 text-center text-muted-foreground">
+        <FileIcon className="mb-4 h-12 w-12 opacity-50" />
         <p>ドキュメントを読み込み中...</p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between p-2 border-b">
-        <h3 className="text-sm font-medium truncate">{currentDocument.title}</h3>
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between border-b p-2">
+        <h3 className="truncate text-sm font-medium">{currentDocument.title}</h3>
         <div className="flex items-center space-x-1 text-xs text-muted-foreground">
           {isSaving ? "保存中..." : "保存済み"}
         </div>
       </div>
 
-      <div className="flex items-center p-1 border-b overflow-x-auto">
+      <div className="flex items-center overflow-x-auto border-b p-1">
         <TooltipProvider>
           {/* ツールバーボタン */}
-          <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => handleToolbarAction("h1")}><Heading1Icon className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>見出し1</TooltipContent></Tooltip>
-          <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => handleToolbarAction("h2")}><Heading2Icon className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>見出し2</TooltipContent></Tooltip>
-          <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => handleToolbarAction("bold")}><BoldIcon className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>太字</TooltipContent></Tooltip>
-          <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => handleToolbarAction("italic")}><ItalicIcon className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>斜体</TooltipContent></Tooltip>
-          <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => handleToolbarAction("link")}><LinkIcon className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>リンク</TooltipContent></Tooltip>
-          <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => handleToolbarAction("list")}><ListIcon className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>リスト</TooltipContent></Tooltip>
-          <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => handleToolbarAction("quote")}><QuoteIcon className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>引用</TooltipContent></Tooltip>
-          <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => handleToolbarAction("code")}><CodeIcon className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>コードブロック</TooltipContent></Tooltip>
-          <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => handleToolbarAction("hr")}><SeparatorHorizontalIcon className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>スライド区切り</TooltipContent></Tooltip>
-          <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => handleToolbarAction("image-url")}><LinkIcon className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>画像URLを挿入</TooltipContent></Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={() => handleToolbarAction("h1")}>
+                <Heading1Icon className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>見出し1</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={() => handleToolbarAction("h2")}>
+                <Heading2Icon className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>見出し2</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={() => handleToolbarAction("bold")}>
+                <BoldIcon className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>太字</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={() => handleToolbarAction("italic")}>
+                <ItalicIcon className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>斜体</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={() => handleToolbarAction("link")}>
+                <LinkIcon className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>リンク</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={() => handleToolbarAction("list")}>
+                <ListIcon className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>リスト</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={() => handleToolbarAction("quote")}>
+                <QuoteIcon className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>引用</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={() => handleToolbarAction("code")}>
+                <CodeIcon className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>コードブロック</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={() => handleToolbarAction("hr")}>
+                <SeparatorHorizontalIcon className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>スライド区切り</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={() => handleToolbarAction("image-url")}>
+                <LinkIcon className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>画像URLを挿入</TooltipContent>
+          </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
               <ImageLibrary onInsertReference={handleInsertImageReference} />
             </TooltipTrigger>
             <TooltipContent>画像ライブラリを開く</TooltipContent>
           </Tooltip>
-          <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="sm" onClick={() => handleToolbarAction("marp-directive")}>Marp</Button></TooltipTrigger><TooltipContent>Marpディレクティブ挿入</TooltipContent></Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleToolbarAction("marp-directive")}
+              >
+                Marp
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Marpディレクティブ挿入</TooltipContent>
+          </Tooltip>
         </TooltipProvider>
       </div>
 
@@ -162,7 +278,7 @@ export const EditorPane = React.memo(({ markdown, onChange, currentDocument }: E
         ref={textareaRef}
         value={markdown}
         onChange={(e) => onChange(e.target.value)} // onChange は props なので直接渡す
-        className="flex-1 resize-none font-mono text-sm p-4 rounded-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+        className="flex-1 resize-none rounded-none border-0 p-4 font-mono text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
         placeholder="Marpプレゼンテーションを作成するには、ここに入力を始めてください..."
         disabled={!isDbInitialized} // DB初期化中は無効化
       />
@@ -170,4 +286,4 @@ export const EditorPane = React.memo(({ markdown, onChange, currentDocument }: E
   );
 });
 
-EditorPane.displayName = 'EditorPane'; // displayName を設定
+EditorPane.displayName = "EditorPane"; // displayName を設定

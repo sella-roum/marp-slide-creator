@@ -1,32 +1,49 @@
-"use client"
+"use client";
 
 import React, { useState, useCallback } from "react";
-import { Button } from "@/components/ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Label } from "@/components/ui/label"
-import { downloadFile } from "@/lib/utils"
-import { useToast } from "@/hooks/use-toast"
-import { DownloadIcon, Loader2Icon } from "lucide-react"
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { downloadFile } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
+import { DownloadIcon, Loader2Icon } from "lucide-react";
 import { processMarkdownForRender } from "@/lib/markdown-processor";
 
 interface ExportDropdownProps {
-  markdown: string
-  documentTitle: string
+  markdown: string;
+  documentTitle: string;
 }
 
 export const ExportDropdown = React.memo(({ markdown, documentTitle }: ExportDropdownProps) => {
-  const { toast } = useToast()
-  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
+  const { toast } = useToast();
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<"html" | "markdown">("html");
-  const [includeSpeakerNotes, setIncludeSpeakerNotes] = useState(false)
-  const [isExporting, setIsExporting] = useState(false)
+  const [includeSpeakerNotes, setIncludeSpeakerNotes] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const handleExport = useCallback(async () => {
     if (!markdown) {
-        toast({ title: "エラー", description: "エクスポートするコンテンツがありません", variant: "destructive" });
-        return;
+      toast({
+        title: "エラー",
+        description: "エクスポートするコンテンツがありません",
+        variant: "destructive",
+      });
+      return;
     }
 
     setIsExporting(true);
@@ -270,9 +287,11 @@ export const ExportDropdown = React.memo(({ markdown, documentTitle }: ExportDro
         downloadFile(fullHTML, `${documentTitle}.html`, "text/html");
       }
 
-      toast({ title: "成功", description: `${exportFormat.toUpperCase()}としてエクスポートしました` });
+      toast({
+        title: "成功",
+        description: `${exportFormat.toUpperCase()}としてエクスポートしました`,
+      });
       setIsExportDialogOpen(false);
-
     } catch (error) {
       console.error("Export failed:", error);
       toast({
@@ -290,13 +309,21 @@ export const ExportDropdown = React.memo(({ markdown, documentTitle }: ExportDro
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm">
-            <DownloadIcon className="h-4 w-4 mr-1" />
+            <DownloadIcon className="mr-1 h-4 w-4" />
             Export
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DialogTrigger asChild><DropdownMenuItem onSelect={() => setExportFormat("html")}>HTMLとしてエクスポート</DropdownMenuItem></DialogTrigger>
-          <DialogTrigger asChild><DropdownMenuItem onSelect={() => setExportFormat("markdown")}>Markdownとしてエクスポート</DropdownMenuItem></DialogTrigger>
+          <DialogTrigger asChild>
+            <DropdownMenuItem onSelect={() => setExportFormat("html")}>
+              HTMLとしてエクスポート
+            </DropdownMenuItem>
+          </DialogTrigger>
+          <DialogTrigger asChild>
+            <DropdownMenuItem onSelect={() => setExportFormat("markdown")}>
+              Markdownとしてエクスポート
+            </DropdownMenuItem>
+          </DialogTrigger>
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -304,18 +331,28 @@ export const ExportDropdown = React.memo(({ markdown, documentTitle }: ExportDro
         <DialogHeader>
           <DialogTitle>{exportFormat.toUpperCase()}としてエクスポート</DialogTitle>
         </DialogHeader>
-        <div className="py-4 space-y-4">
+        <div className="space-y-4 py-4">
           <div className="flex items-center space-x-2 opacity-50">
-            <Checkbox id="speaker-notes" checked={includeSpeakerNotes} onCheckedChange={(checked) => setIncludeSpeakerNotes(checked === true)} disabled />
-            <Label htmlFor="speaker-notes" className="text-muted-foreground">スピーカーノートを含める (未対応)</Label>
+            <Checkbox
+              id="speaker-notes"
+              checked={includeSpeakerNotes}
+              onCheckedChange={(checked) => setIncludeSpeakerNotes(checked === true)}
+              disabled
+            />
+            <Label htmlFor="speaker-notes" className="text-muted-foreground">
+              スピーカーノートを含める (未対応)
+            </Label>
           </div>
           <p className="text-sm text-muted-foreground">
-            {exportFormat === "html" ? "インタラクティブ機能付きのスタンドアロンHTMLファイルを生成します。" :
-             "現在のMarkdownコンテンツをファイルとしてダウンロードします。"}
+            {exportFormat === "html"
+              ? "インタラクティブ機能付きのスタンドアロンHTMLファイルを生成します。"
+              : "現在のMarkdownコンテンツをファイルとしてダウンロードします。"}
           </p>
         </div>
         <DialogFooter>
-           <DialogClose asChild><Button variant="outline">キャンセル</Button></DialogClose>
+          <DialogClose asChild>
+            <Button variant="outline">キャンセル</Button>
+          </DialogClose>
           <Button onClick={handleExport} disabled={isExporting}>
             {isExporting && <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />}
             {isExporting ? "エクスポート中..." : `${exportFormat.toUpperCase()}としてエクスポート`}
@@ -323,7 +360,7 @@ export const ExportDropdown = React.memo(({ markdown, documentTitle }: ExportDro
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 });
 
-ExportDropdown.displayName = 'ExportDropdown';
+ExportDropdown.displayName = "ExportDropdown";

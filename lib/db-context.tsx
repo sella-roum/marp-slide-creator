@@ -1,7 +1,7 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { initializeDB } from './db'; // initializeDB の実装はそのまま
+import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { initializeDB } from "./db"; // initializeDB の実装はそのまま
 
 interface DbContextType {
   isDbInitialized: boolean;
@@ -28,9 +28,5 @@ export const DbProvider = ({ children }: { children: ReactNode }) => {
       });
   }, []); // 初回マウント時のみ実行
 
-  return (
-    <DbContext.Provider value={{ isDbInitialized, dbError }}>
-      {children}
-    </DbContext.Provider>
-  );
+  return <DbContext.Provider value={{ isDbInitialized, dbError }}>{children}</DbContext.Provider>;
 };

@@ -1,4 +1,4 @@
-import { getImage } from './db'; // getImage 関数をインポート
+import { getImage } from "./db"; // getImage 関数をインポート
 
 // カスタムスキーマ `image://<uuid>` にマッチする正規表現
 const IMAGE_REFERENCE_REGEX = /!\[(.*?)\]\(image:\/\/([a-fA-F0-9-]+)\)/g;
@@ -23,15 +23,17 @@ export async function processMarkdownForRender(markdown: string): Promise<string
   }
 
   // ユニークなIDごとにDB取得のPromiseを作成
-  uniqueImageIds.forEach(imageId => {
+  uniqueImageIds.forEach((imageId) => {
     imageFetchPromises.push(
-      getImage(imageId).then(imageData => ({
-        id: imageId,
-        dataUrl: imageData?.dataUrl || null, // 見つからない場合は null
-      })).catch(error => {
+      getImage(imageId)
+        .then((imageData) => ({
+          id: imageId,
+          dataUrl: imageData?.dataUrl || null, // 見つからない場合は null
+        }))
+        .catch((error) => {
           console.error(`Error fetching image data for ID ${imageId}:`, error);
           return { id: imageId, dataUrl: null }; // エラー時も null を返す
-      })
+        })
     );
   });
 
@@ -40,25 +42,28 @@ export async function processMarkdownForRender(markdown: string): Promise<string
 
   // 取得結果をマップに変換して高速アクセス
   const imageDataMap = new Map<string, string | null>();
-  imageDataResults.forEach(result => {
+  imageDataResults.forEach((result) => {
     imageDataMap.set(result.id, result.dataUrl);
   });
 
   // マッチした箇所を置換
-  processedMarkdown = processedMarkdown.replace(IMAGE_REFERENCE_REGEX, (match, altText, imageId) => {
-    const dataUrl = imageDataMap.get(imageId);
-    if (dataUrl) {
-      console.log(`Replaced image reference for ID: ${imageId}`);
-      // Altテキストを保持して置換
-      return `![${altText || ''}](${dataUrl})`;
-    } else {
-      // 画像が見つからなかった場合の処理
-      console.warn(`Image data not found for ID: ${imageId}. Keeping reference.`);
-      // 参照を残すか、エラー表示にするか選択
-      // return `![⚠️ ${altText || ''} (画像が見つかりません: ${imageId})](${imageId})`; // エラー表示
-      return match; // 元の参照文字列を残す
+  processedMarkdown = processedMarkdown.replace(
+    IMAGE_REFERENCE_REGEX,
+    (match, altText, imageId) => {
+      const dataUrl = imageDataMap.get(imageId);
+      if (dataUrl) {
+        console.log(`Replaced image reference for ID: ${imageId}`);
+        // Altテキストを保持して置換
+        return `![${altText || ""}](${dataUrl})`;
+      } else {
+        // 画像が見つからなかった場合の処理
+        console.warn(`Image data not found for ID: ${imageId}. Keeping reference.`);
+        // 参照を残すか、エラー表示にするか選択
+        // return `![⚠️ ${altText || ''} (画像が見つかりません: ${imageId})](${imageId})`; // エラー表示
+        return match; // 元の参照文字列を残す
+      }
     }
-  });
+  );
 
   return processedMarkdown;
 }
