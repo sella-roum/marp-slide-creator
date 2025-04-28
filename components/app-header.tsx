@@ -5,7 +5,7 @@ import { Separator } from "@/components/ui/separator";
 import {
     DropdownMenu,
     DropdownMenuContent,
-    DropdownMenuItem,
+    DropdownMenuItem, // DropdownMenuItem はここでは不要
     DropdownMenuLabel,
     DropdownMenuRadioGroup,
     DropdownMenuRadioItem,
@@ -13,9 +13,10 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ExportDropdown } from "@/components/export-dropdown";
-import { MessageSquareIcon, CodeIcon, EyeIcon, LayoutIcon, RowsIcon, ColumnsIcon, PanelRightIcon } from "lucide-react";
+// PanelBottomIcon をインポート
+import { MessageSquareIcon, CodeIcon, EyeIcon, LayoutIcon, RowsIcon, ColumnsIcon, PanelRightIcon, PanelBottomIcon } from "lucide-react";
 import type { DocumentType } from "@/lib/types";
-import type { LayoutMode } from '@/lib/constants'; // LayoutMode をインポート
+import type { LayoutMode } from '@/lib/constants';
 
 interface AppHeaderProps {
   currentDocument: DocumentType | null;
@@ -60,10 +61,11 @@ export const AppHeader: React.FC<AppHeaderProps> = React.memo(({
             <DropdownMenuLabel>レイアウト選択</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuRadioGroup value={layoutMode} onValueChange={(value) => setLayoutMode(value as LayoutMode)}>
-              <DropdownMenuRadioItem value="default"><ColumnsIcon className="h-4 w-4 mr-2 opacity-50"/> デフォルト (左チャット)</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="horizontal"><RowsIcon className="h-4 w-4 mr-2 opacity-50"/> 横3列</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="default"><ColumnsIcon className="h-4 w-4 mr-2 opacity-50"/> チャット左配置</DropdownMenuRadioItem>
               <DropdownMenuRadioItem value="chat-right"><PanelRightIcon className="h-4 w-4 mr-2 opacity-50"/> チャット右配置</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="horizontal"><RowsIcon className="h-4 w-4 mr-2 opacity-50"/> 横3列</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="editor-focused"><RowsIcon className="h-4 w-4 mr-2 opacity-50 rotate-90"/> エディタ重視 (縦積)</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="editor-focused"><RowsIcon className="h-4 w-4 mr-2 opacity-50 rotate-90"/> エディタ上配置</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="editor-bottom"><PanelBottomIcon className="h-4 w-4 mr-2 opacity-50"/> エディタ下配置</DropdownMenuRadioItem>
             </DropdownMenuRadioGroup>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -84,4 +86,4 @@ export const AppHeader: React.FC<AppHeaderProps> = React.memo(({
   );
 });
 
-AppHeader.displayName = 'AppHeader'; // React.memo でラップした場合 displayName を設定
+AppHeader.displayName = 'AppHeader';

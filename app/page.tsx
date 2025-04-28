@@ -5,7 +5,6 @@ import { Toaster } from "@/components/ui/toaster"
 import { useToast } from "@/hooks/use-toast"
 import { useDb } from "@/lib/db-context"; // useDb フックをインポート
 import {
-    // initializeDB, // initializeDB は DbProvider で実行
     getDocument,
     updateDocument,
 } from "@/lib/db"
@@ -31,7 +30,8 @@ export default function Home() {
   const [isChatVisible, setIsChatVisible] = useState(true);
   const [isEditorVisible, setIsEditorVisible] = useState(true);
   const [isPreviewVisible, setIsPreviewVisible] = useState(true);
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>('default');
+  // layoutMode の初期値を 'horizontal' に変更
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>('horizontal');
 
   // DB初期化エラーハンドリング
   useEffect(() => {
@@ -44,9 +44,8 @@ export default function Home() {
     }
   }, [dbError, toast]);
 
-  // 単一ドキュメントの読み込み/作成 (useCallback の依存配列修正)
+  // 単一ドキュメントの読み込み/作成
   const loadOrCreateSingleDocument = useCallback(async () => {
-    // isDbInitialized を DbContext から取得するため、引数から削除
     if (!isDbInitialized) return;
     try {
       console.log(`Loading document with ID: ${SINGLE_DOCUMENT_ID}`);
@@ -71,14 +70,13 @@ export default function Home() {
       }
 
       if (doc) {
-        // 外部で変更された場合のみ state を更新するように修正
         setCurrentDocument(prevDoc => {
             if (!prevDoc || prevDoc.id !== doc.id || prevDoc.updatedAt < doc.updatedAt) {
                 setMarkdownContent(doc.content);
                 console.log("Document loaded/updated in state:", doc.title);
                 return doc;
             }
-            return prevDoc; // 変更なければ state を維持
+            return prevDoc;
         });
       } else {
           console.error("Failed to load or create the document.");
@@ -87,12 +85,10 @@ export default function Home() {
 
     } catch (error) {
       console.error("Failed to load or create single document:", error);
-      // DBエラーは DbContext でハンドリングするため、ここでは重複しないように注意
       if (!(error instanceof Error && error.message.includes("Database"))) {
           toast({ title: "ドキュメントエラー", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
       }
     }
-  // 依存配列から markdownContent を削除し、isDbInitialized を追加
   }, [isDbInitialized, toast]);
 
   // DB初期化後にドキュメント読み込み
@@ -102,25 +98,23 @@ export default function Home() {
     }
   }, [isDbInitialized, loadOrCreateSingleDocument]);
 
-  // Markdown 変更ハンドラ (useCallback でメモ化)
+  // Markdown 変更ハンドラ
   const handleMarkdownChange = useCallback((content: string) => {
     setMarkdownContent(content);
-    // currentDocument の更新は debouncedSave に任せる
-  }, []); // 依存配列は空
+  }, []);
 
-  // カラム表示状態トグル関数 (useCallback でメモ化)
+  // カラム表示状態トグル関数
   const togglePanel = useCallback((panel: 'chat' | 'editor' | 'preview') => {
-    // isXxxVisible の state setter は安定しているので依存配列に含めなくて良い
     switch (panel) {
       case 'chat': setIsChatVisible(prev => !prev); break;
       case 'editor': setIsEditorVisible(prev => !prev); break;
       case 'preview': setIsPreviewVisible(prev => !prev); break;
     }
-  }, []); // 依存配列は空
+  }, []);
 
   const visiblePanelsCount = [isChatVisible, isEditorVisible, isPreviewVisible].filter(Boolean).length;
 
-  // 各パネルのレンダリング関数 (useCallback でメモ化)
+  // 各パネルのレンダリング関数
   const renderChatPanel = useCallback(() => (
     isChatVisible && (
       <ResizablePanel
@@ -142,7 +136,6 @@ export default function Home() {
         </div>
       </ResizablePanel>
     )
-  // 依存配列に必要な state と関数を追加
   ), [isChatVisible, layoutMode, currentDocument, handleMarkdownChange]);
 
   const renderEditorPanel = useCallback(() => (
@@ -165,7 +158,6 @@ export default function Home() {
         </div>
       </ResizablePanel>
     )
-  // 依存配列に必要な state と関数を追加
   ), [isEditorVisible, layoutMode, markdownContent, handleMarkdownChange, currentDocument]);
 
   const renderPreviewPanel = useCallback(() => (
@@ -184,10 +176,9 @@ export default function Home() {
         </div>
       </ResizablePanel>
     )
-  // 依存配列に必要な state を追加
   ), [isPreviewVisible, layoutMode, markdownContent]);
 
-  // エディタ/プレビューのグループをレンダリングする関数 (useCallback でメモ化)
+  // エディタ/プレビューのグループをレンダリングする関数
   const renderEditorPreviewGroup = useCallback((direction: "vertical" | "horizontal", defaultSize: number, order: number) => (
     (isEditorVisible || isPreviewVisible) && (
         <ResizablePanel id={`editor-preview-group-${layoutMode}`} order={order} defaultSize={defaultSize} minSize={30}>
@@ -198,10 +189,8 @@ export default function Home() {
             </ResizablePanelGroup>
         </ResizablePanel>
     )
-  // 依存配列に必要な state と関数を追加
   ), [isEditorVisible, isPreviewVisible, layoutMode, renderEditorPanel, renderPreviewPanel]);
 
-  // DBが初期化されていない、またはエラーがある場合はローディング表示やエラー表示
   if (!isDbInitialized || dbError) {
     return (
       <main className="flex flex-col h-screen items-center justify-center">
@@ -216,7 +205,6 @@ export default function Home() {
 
   return (
     <main className="flex flex-col h-screen overflow-hidden">
-      {/* ヘッダーコンポーネントを使用 */}
       <AppHeader
         currentDocument={currentDocument}
         markdownContent={markdownContent}
@@ -229,7 +217,6 @@ export default function Home() {
         visiblePanelsCount={visiblePanelsCount}
       />
 
-      {/* レイアウトコンポーネントを使用 */}
       <MainLayout
         layoutMode={layoutMode}
         isChatVisible={isChatVisible}

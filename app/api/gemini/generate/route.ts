@@ -130,7 +130,7 @@ ${context?.currentMarkdown || "No content yet"}
 
       // --- レスポンス処理の修正 ---
       const resultText = response.text; // .text アクセサを使用
-      console.log("Raw response text:", resultText); // デバッグ用ログ
+      // console.log("Raw response text:", resultText); // デバッグ用ログ
 
       // レスポンスが空またはブロックされた場合のチェック
       if (!resultText) {
