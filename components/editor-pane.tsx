@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react"; // React と useCallback をインポート
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react"; // useLayoutEffect をインポート
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -36,6 +36,7 @@ export const EditorPane = React.memo(({ markdown, onChange, currentDocument }: E
   const { isDbInitialized } = useDb(); // DB初期化状態を取得
   const [isSaving, setIsSaving] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editorScrollTopRef = useRef<number>(0); // スクロール位置を保持するref
 
   // Insert text at cursor position (useCallback でメモ化)
   const insertTextAtCursor = useCallback(
@@ -150,6 +151,21 @@ export const EditorPane = React.memo(({ markdown, onChange, currentDocument }: E
     },
     [insertTextAtCursor]
   ); // insertTextAtCursor を依存配列に追加
+
+  // --- スクロール位置の保持 ---
+  // スクロールイベントで現在の位置をrefに保存
+  const handleScroll = useCallback(() => {
+    if (textareaRef.current) {
+      editorScrollTopRef.current = textareaRef.current.scrollTop;
+    }
+  }, []);
+
+  // markdownが変更された後にスクロール位置を復元
+  useLayoutEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.scrollTop = editorScrollTopRef.current;
+    }
+  }, [markdown]); // markdown が更新された後に実行
 
   // Render
   if (!currentDocument) {
@@ -278,6 +294,7 @@ export const EditorPane = React.memo(({ markdown, onChange, currentDocument }: E
         ref={textareaRef}
         value={markdown}
         onChange={(e) => onChange(e.target.value)} // onChange は props なので直接渡す
+        onScroll={handleScroll} // スクロールイベントハンドラを追加
         className="flex-1 resize-none rounded-none border-0 p-4 font-mono text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
         placeholder="Marpプレゼンテーションを作成するには、ここに入力を始めてください..."
         disabled={!isDbInitialized} // DB初期化中は無効化

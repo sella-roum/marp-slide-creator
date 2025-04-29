@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react"; // React をインポート
+import React, { useState, useEffect, useRef, useLayoutEffect } from "react"; // useRef, useLayoutEffect をインポート
 import { FileIcon, Loader2Icon, AlertCircleIcon } from "lucide-react";
 import { processMarkdownForRender } from "@/lib/markdown-processor";
 
@@ -15,6 +15,8 @@ export const PreviewPane = React.memo(({ markdown }: PreviewPaneProps) => {
   const [isProcessing, setIsProcessing] = useState(false); // Markdown処理中用
   const [marpInstance, setMarpInstance] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null); // iframeへの参照
+  const previewScrollTopRef = useRef<number>(0); // プレビューのスクロール位置を保持
 
   // Initialize Marp (変更なし)
   useEffect(() => {
@@ -22,7 +24,6 @@ export const PreviewPane = React.memo(({ markdown }: PreviewPaneProps) => {
       setIsLoading(true);
       setError(null);
       try {
-        // 動的インポートに変更
         const { Marp } = await import(/* webpackChunkName: "marp-core" */ "@marp-team/marp-core");
         const marp = new Marp({ html: true, math: true, minifyCSS: false });
         setMarpInstance(marp);
@@ -36,9 +37,9 @@ export const PreviewPane = React.memo(({ markdown }: PreviewPaneProps) => {
     initializeMarp();
   }, []);
 
-  // Render markdown with Marp (変更なし)
+  // Render markdown with Marp
   useEffect(() => {
-    if (!marpInstance || isProcessing) return;
+    if (!marpInstance) return;
 
     const render = async () => {
       if (!markdown) {
@@ -51,10 +52,19 @@ export const PreviewPane = React.memo(({ markdown }: PreviewPaneProps) => {
       setIsProcessing(true);
       setError(null);
 
+      // --- ▼ スクロール位置の保存 ▼ ---
+      // renderedHTML を更新する前に現在のスクロール位置を取得
+      const currentIframe = iframeRef.current;
+      if (currentIframe && currentIframe.contentWindow) {
+        previewScrollTopRef.current = currentIframe.contentWindow.scrollY;
+        // console.log("Saving preview scroll position:", previewScrollTopRef.current);
+      }
+      // --- ▲ スクロール位置の保存 ▲ ---
+
       try {
-        console.log("Processing markdown for preview...");
+        // console.log("Processing markdown for preview...");
         const processedMarkdown = await processMarkdownForRender(markdown);
-        console.log("Markdown processed.");
+        // console.log("Markdown processed.");
 
         let finalMarkdown = processedMarkdown;
         if (!finalMarkdown.includes("marp: true")) {
@@ -81,7 +91,28 @@ export const PreviewPane = React.memo(({ markdown }: PreviewPaneProps) => {
     };
 
     render();
-  }, [markdown, marpInstance, isProcessing]); // isProcessing を依存配列に追加
+  }, [markdown, marpInstance]); // isProcessing は依存配列から削除済み
+
+  // --- ▼ スクロール位置の復元 ▼ ---
+  // renderedHTML が更新された後、iframe の load イベントでスクロール位置を復元
+  useLayoutEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+
+    const handleLoad = () => {
+      // console.log("Restoring preview scroll position to:", previewScrollTopRef.current);
+      iframe.contentWindow?.scrollTo(0, previewScrollTopRef.current);
+    };
+
+    iframe.addEventListener('load', handleLoad);
+
+    // クリーンアップ関数
+    return () => {
+      iframe.removeEventListener('load', handleLoad);
+    };
+    // renderedHTML が変わるたびに load イベントリスナーを再設定
+  }, [renderedHTML]);
+  // --- ▲ スクロール位置の復元 ▲ ---
 
   return (
     <div className="flex h-full flex-col">
@@ -118,10 +149,12 @@ export const PreviewPane = React.memo(({ markdown }: PreviewPaneProps) => {
           <div className={`h-full w-full p-4 ${isProcessing ? "opacity-50" : ""}`}>
             {renderedHTML ? (
               <iframe
+                ref={iframeRef} // iframe への参照を設定
                 srcDoc={renderedHTML}
                 className="h-full w-full rounded border-0 bg-white"
                 title="Marp Preview"
                 sandbox="allow-scripts allow-same-origin"
+                // onLoad は useLayoutEffect 内で処理するため削除
               />
             ) : markdown ? (
               <div className="flex h-full items-center justify-center text-muted-foreground">
