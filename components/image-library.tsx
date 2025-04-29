@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react"; // React をインポート
+import React, { useState, useRef, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -25,7 +25,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import type { ImageType } from "@/lib/types";
 import { addImage, getImages, deleteImage } from "@/lib/db";
-import { useDb } from "@/lib/db-context"; // useDb フックをインポート
+import { useDb } from "@/lib/db-context";
 import { imageToBase64 } from "@/lib/utils";
 import Image from "next/image";
 
@@ -33,7 +33,6 @@ interface ImageLibraryProps {
   onInsertReference: (reference: string) => void;
 }
 
-// DialogTrigger として使うための forwardRef (変更なし)
 const ImageLibraryTrigger = React.forwardRef<HTMLButtonElement>((props, ref) => (
   <Button variant="ghost" size="icon" ref={ref} {...props}>
     <ImagePlusIcon className="h-4 w-4" />
@@ -42,7 +41,6 @@ const ImageLibraryTrigger = React.forwardRef<HTMLButtonElement>((props, ref) => 
 ));
 ImageLibraryTrigger.displayName = "ImageLibraryTrigger";
 
-// React.memo でラップ
 export const ImageLibrary = React.memo(({ onInsertReference }: ImageLibraryProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [images, setImages] = useState<ImageType[]>([]);
@@ -52,19 +50,16 @@ export const ImageLibrary = React.memo(({ onInsertReference }: ImageLibraryProps
   const [copiedStates, setCopiedStates] = useState<Record<string, boolean>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
-  const { isDbInitialized } = useDb(); // DB初期化状態を取得
+  const { isDbInitialized } = useDb();
 
-  // ライブラリを開いたときに画像を読み込む (DB初期化チェック追加)
   const loadImages = useCallback(async () => {
     if (!isDbInitialized) {
-      // DB初期化チェック
       console.log("ImageLibrary: DB not initialized, skipping image load.");
       setError("データベースが初期化されていません。");
       setIsLoading(false);
       setImages([]);
       return;
     }
-    // isOpen が true になってから少し待って実行 (Dialog のレンダリング待ち)
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     setIsLoading(true);
@@ -83,10 +78,8 @@ export const ImageLibrary = React.memo(({ onInsertReference }: ImageLibraryProps
     } finally {
       setIsLoading(false);
     }
-    // isDbInitialized を依存配列に追加
   }, [toast, isDbInitialized]);
 
-  // ダイアログの開閉状態が変わったときに画像を読み込む (変更なし)
   const handleOpenChange = useCallback(
     (open: boolean) => {
       setIsOpen(open);
@@ -95,13 +88,11 @@ export const ImageLibrary = React.memo(({ onInsertReference }: ImageLibraryProps
       }
     },
     [loadImages]
-  ); // loadImages を依存配列に追加
+  );
 
-  // 画像アップロード処理 (DB初期化チェック追加)
   const handleImageUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (!isDbInitialized) {
-        // DB初期化チェック
         toast({
           title: "エラー",
           description: "データベース未初期化のためアップロードできません。",
@@ -123,7 +114,7 @@ export const ImageLibrary = React.memo(({ onInsertReference }: ImageLibraryProps
         };
         await addImage(imageData);
         toast({ title: "成功", description: `画像「${file.name}」をアップロードしました。` });
-        await loadImages(); // アップロード後にリストを再読み込み
+        await loadImages();
       } catch (err) {
         console.error("Failed to upload image:", err);
         toast({
@@ -137,16 +128,12 @@ export const ImageLibrary = React.memo(({ onInsertReference }: ImageLibraryProps
           fileInputRef.current.value = "";
         }
       }
-      // isDbInitialized, loadImages, toast を依存配列に追加
     },
     [isDbInitialized, loadImages, toast]
   );
-
-  // 画像削除処理 (DB初期化チェック追加)
   const handleDeleteImage = useCallback(
     async (id: string, name: string) => {
       if (!isDbInitialized) {
-        // DB初期化チェック
         toast({
           title: "エラー",
           description: "データベース未初期化のため削除できません。",
@@ -169,23 +156,19 @@ export const ImageLibrary = React.memo(({ onInsertReference }: ImageLibraryProps
           variant: "destructive",
         });
       }
-      // isDbInitialized, toast を依存配列に追加
     },
     [isDbInitialized, toast]
   );
-
-  // 参照文字列を挿入 (変更なし)
   const handleInsertClick = useCallback(
     (image: ImageType) => {
       const reference = `![${image.name}](image://${image.id})`;
       onInsertReference(reference);
-      handleOpenChange(false); // ダイアログを閉じる
+      handleOpenChange(false);
       toast({ title: "画像参照を挿入しました", description: reference });
     },
     [onInsertReference, handleOpenChange, toast]
-  ); // 依存配列に onInsertReference, handleOpenChange, toast を追加
+  );
 
-  // 参照文字列をコピー (変更なし)
   const handleCopyReference = useCallback(
     (image: ImageType) => {
       const reference = `![${image.name}](image://${image.id})`;
@@ -204,7 +187,7 @@ export const ImageLibrary = React.memo(({ onInsertReference }: ImageLibraryProps
         });
     },
     [toast]
-  ); // 依存配列に toast を追加
+  );
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
@@ -217,7 +200,6 @@ export const ImageLibrary = React.memo(({ onInsertReference }: ImageLibraryProps
           <DialogDescription>アップロード済みの画像を表示・管理します。</DialogDescription>
         </DialogHeader>
 
-        {/* アップロードボタン */}
         <div className="flex-shrink-0 px-6 pt-4">
           <Button
             onClick={() => fileInputRef.current?.click()}
@@ -240,7 +222,6 @@ export const ImageLibrary = React.memo(({ onInsertReference }: ImageLibraryProps
           />
         </div>
 
-        {/* 画像リスト */}
         <ScrollArea className="my-0 flex-1 border-y">
           <div className="p-6">
             {isLoading && (
@@ -280,7 +261,7 @@ export const ImageLibrary = React.memo(({ onInsertReference }: ImageLibraryProps
                         layout="fill"
                         objectFit="contain"
                         className="transition-opacity group-hover:opacity-75"
-                        unoptimized // Base64画像なので最適化不要
+                        unoptimized
                       />
                       <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/60 p-1 opacity-0 transition-opacity group-hover:opacity-100">
                         <Button
@@ -341,4 +322,4 @@ export const ImageLibrary = React.memo(({ onInsertReference }: ImageLibraryProps
   );
 });
 
-ImageLibrary.displayName = "ImageLibrary"; // displayName を設定
+ImageLibrary.displayName = "ImageLibrary";

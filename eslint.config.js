@@ -1,17 +1,9 @@
 import tsParser from "@typescript-eslint/parser";
-import tsPlugin  from "@typescript-eslint/eslint-plugin";
-import prettier   from "eslint-plugin-prettier";
+import tsPlugin from "@typescript-eslint/eslint-plugin";
+import prettier from "eslint-plugin-prettier";
 
 export default {
-  ignores: [
-    ".next/",
-    "node_modules/",
-    "build/",
-    "out/",
-    "public/",
-    "*.config.js",
-    "*.config.mjs"
-  ],
+  ignores: [".next/", "node_modules/", "build/", "out/", "public/", "*.config.js", "*.config.mjs"],
   languageOptions: {
     parser: tsParser,
     parserOptions: {

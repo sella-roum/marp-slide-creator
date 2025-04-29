@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react"; // useLayoutEffect をインポート
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -8,7 +8,7 @@ import type { DocumentType } from "@/lib/types";
 import { updateDocument } from "@/lib/db";
 import { debounce } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { useDb } from "@/lib/db-context"; // useDb フックをインポート
+import { useDb } from "@/lib/db-context";
 import {
   LinkIcon,
   CodeIcon,
@@ -30,15 +30,13 @@ interface EditorPaneProps {
   currentDocument: DocumentType | null;
 }
 
-// React.memo でラップ
 export const EditorPane = React.memo(({ markdown, onChange, currentDocument }: EditorPaneProps) => {
   const { toast } = useToast();
-  const { isDbInitialized } = useDb(); // DB初期化状態を取得
+  const { isDbInitialized } = useDb();
   const [isSaving, setIsSaving] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const editorScrollTopRef = useRef<number>(0); // スクロール位置を保持するref
+  const editorScrollTopRef = useRef<number>(0);
 
-  // Insert text at cursor position (useCallback でメモ化)
   const insertTextAtCursor = useCallback(
     (textBefore: string, textAfter = "") => {
       if (!textareaRef.current) return;
@@ -52,8 +50,7 @@ export const EditorPane = React.memo(({ markdown, onChange, currentDocument }: E
         selectedText +
         textAfter +
         textarea.value.substring(end);
-      onChange(newText); // onChange は props なので依存配列に追加
-      // フォーカスとカーソル位置設定は setTimeout 内なのでメモ化の影響は限定的
+      onChange(newText);
       setTimeout(() => {
         if (textareaRef.current) {
           textareaRef.current.focus();
@@ -63,21 +60,18 @@ export const EditorPane = React.memo(({ markdown, onChange, currentDocument }: E
       }, 0);
     },
     [onChange]
-  ); // onChange を依存配列に追加
+  );
 
-  // 画像参照を挿入する関数 (useCallback でメモ化)
   const handleInsertImageReference = useCallback(
     (reference: string) => {
       insertTextAtCursor(reference);
     },
     [insertTextAtCursor]
-  ); // insertTextAtCursor を依存配列に追加
+  );
 
-  // Save document with debounce (DB初期化チェック追加)
   const debouncedSave = useRef(
     debounce(async (documentData: DocumentType) => {
       if (!isDbInitialized) {
-        // DB初期化チェック
         console.warn("EditorPane: DB not initialized, skipping save.");
         return;
       }
@@ -93,9 +87,7 @@ export const EditorPane = React.memo(({ markdown, onChange, currentDocument }: E
     }, 1000)
   ).current;
 
-  // Save document when content changes (DB初期化チェック追加)
   useEffect(() => {
-    // DBが初期化されてから保存処理を行う
     if (isDbInitialized && currentDocument && markdown !== currentDocument.content) {
       const docToSave: DocumentType = {
         ...currentDocument,
@@ -104,10 +96,8 @@ export const EditorPane = React.memo(({ markdown, onChange, currentDocument }: E
       };
       debouncedSave(docToSave);
     }
-    // isDbInitialized を依存配列に追加
   }, [markdown, currentDocument, debouncedSave, isDbInitialized]);
 
-  // Handle toolbar actions (useCallback でメモ化)
   const handleToolbarAction = useCallback(
     (action: string) => {
       switch (action) {
@@ -150,24 +140,19 @@ export const EditorPane = React.memo(({ markdown, onChange, currentDocument }: E
       }
     },
     [insertTextAtCursor]
-  ); // insertTextAtCursor を依存配列に追加
+  );
 
-  // --- スクロール位置の保持 ---
-  // スクロールイベントで現在の位置をrefに保存
   const handleScroll = useCallback(() => {
     if (textareaRef.current) {
       editorScrollTopRef.current = textareaRef.current.scrollTop;
     }
   }, []);
 
-  // markdownが変更された後にスクロール位置を復元
   useLayoutEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.scrollTop = editorScrollTopRef.current;
     }
-  }, [markdown]); // markdown が更新された後に実行
-
-  // Render
+  }, [markdown]);
   if (!currentDocument) {
     return (
       <div className="flex h-full flex-col items-center justify-center p-4 text-center text-muted-foreground">
@@ -188,7 +173,6 @@ export const EditorPane = React.memo(({ markdown, onChange, currentDocument }: E
 
       <div className="flex items-center overflow-x-auto border-b p-1">
         <TooltipProvider>
-          {/* ツールバーボタン */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="icon" onClick={() => handleToolbarAction("h1")}>
@@ -293,14 +277,14 @@ export const EditorPane = React.memo(({ markdown, onChange, currentDocument }: E
       <Textarea
         ref={textareaRef}
         value={markdown}
-        onChange={(e) => onChange(e.target.value)} // onChange は props なので直接渡す
-        onScroll={handleScroll} // スクロールイベントハンドラを追加
+        onChange={(e) => onChange(e.target.value)}
+        onScroll={handleScroll}
         className="flex-1 resize-none rounded-none border-0 p-4 font-mono text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
         placeholder="Marpプレゼンテーションを作成するには、ここに入力を始めてください..."
-        disabled={!isDbInitialized} // DB初期化中は無効化
+        disabled={!isDbInitialized}
       />
     </div>
   );
 });
 
-EditorPane.displayName = "EditorPane"; // displayName を設定
+EditorPane.displayName = "EditorPane";

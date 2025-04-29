@@ -3,7 +3,8 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
-import { DbProvider } from "@/lib/db-context"; // DbProvider をインポート
+import { DbProvider } from "@/lib/db-context";
+import { AppProvider } from "@/contexts/AppContext";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -26,8 +27,9 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          {/* DbProvider でラップ */}
-          <DbProvider>{children}</DbProvider>
+          <DbProvider>
+            <AppProvider>{children}</AppProvider>
+          </DbProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -12,7 +12,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ExportDropdown } from "@/components/export-dropdown";
-// PanelBottomIcon をインポート
 import {
   MessageSquareIcon,
   CodeIcon,
@@ -22,6 +21,8 @@ import {
   ColumnsIcon,
   PanelRightIcon,
   PanelBottomIcon,
+  SaveIcon,
+  Loader2Icon,
 } from "lucide-react";
 import type { DocumentType } from "@/lib/types";
 import type { LayoutMode } from "@/lib/constants";
@@ -36,6 +37,7 @@ interface AppHeaderProps {
   isPreviewVisible: boolean;
   togglePanel: (panel: "chat" | "editor" | "preview") => void;
   visiblePanelsCount: number;
+  isSaving: boolean;
 }
 
 export const AppHeader: React.FC<AppHeaderProps> = React.memo(
@@ -49,6 +51,7 @@ export const AppHeader: React.FC<AppHeaderProps> = React.memo(
     isPreviewVisible,
     togglePanel,
     visiblePanelsCount,
+    isSaving,
   }) => {
     return (
       <header className="flex flex-shrink-0 items-center justify-between border-b p-2">
@@ -56,9 +59,21 @@ export const AppHeader: React.FC<AppHeaderProps> = React.memo(
           <h1 className="truncate text-lg font-semibold" title={currentDocument?.title}>
             {currentDocument?.title || "読み込み中..."}
           </h1>
+          <div className="flex items-center text-xs text-muted-foreground">
+            {isSaving ? (
+              <>
+                <Loader2Icon className="mr-1 h-3 w-3 animate-spin" />
+                保存中...
+              </>
+            ) : (
+              <>
+                <SaveIcon className="mr-1 h-3 w-3" />
+                保存済み
+              </>
+            )}
+          </div>
         </div>
         <div className="flex items-center space-x-1">
-          {/* レイアウト選択ドロップダウン */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm">
@@ -94,7 +109,6 @@ export const AppHeader: React.FC<AppHeaderProps> = React.memo(
 
           <Separator orientation="vertical" className="mx-1 h-6" />
 
-          {/* 表示切り替えトグル */}
           <Toggle
             size="sm"
             pressed={isChatVisible}
@@ -125,7 +139,6 @@ export const AppHeader: React.FC<AppHeaderProps> = React.memo(
 
           <Separator orientation="vertical" className="mx-1 h-6" />
 
-          {/* エクスポートボタン */}
           <ExportDropdown
             markdown={markdownContent}
             documentTitle={currentDocument?.title || "Untitled"}

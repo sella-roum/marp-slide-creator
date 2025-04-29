@@ -1,20 +1,14 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback } from "react"; // React をインポート
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import {
   SendIcon,
-  BotIcon,
-  UserIcon,
-  CopyIcon,
-  CheckIcon,
-  Loader2Icon,
   Trash2Icon,
-  ClipboardPasteIcon,
   MessageSquareIcon,
+  Loader2Icon,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type {
@@ -23,9 +17,8 @@ import type {
   GeminiResponseType,
   ChatMessageType,
 } from "@/lib/types";
-import { Skeleton } from "@/components/ui/skeleton";
 import { addChatMessage, getChatMessages, clearChatMessages } from "@/lib/db";
-import { useDb } from "@/lib/db-context"; // useDb フックをインポート
+import { useDb } from "@/lib/db-context";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,16 +30,16 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { ChatMessageItem } from "./chat-message-item";
 
 interface ChatPaneProps {
-  currentDocument: DocumentType | null;
+  currentDocument: DocumentType;
   onApplyToEditor: (content: string) => void;
 }
 
-// React.memo でラップ
 export const ChatPane = React.memo(({ currentDocument, onApplyToEditor }: ChatPaneProps) => {
   const { toast } = useToast();
-  const { isDbInitialized } = useDb(); // DB初期化状態を取得
+  const { isDbInitialized } = useDb();
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -55,7 +48,6 @@ export const ChatPane = React.memo(({ currentDocument, onApplyToEditor }: ChatPa
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
 
-  // ScrollArea の Viewport を取得 (変更なし)
   useEffect(() => {
     if (scrollAreaRef.current) {
       const viewportElement = scrollAreaRef.current.querySelector<HTMLDivElement>(
@@ -67,7 +59,6 @@ export const ChatPane = React.memo(({ currentDocument, onApplyToEditor }: ChatPa
     }
   }, []);
 
-  // メッセージ追加時に一番下にスクロール (変更なし)
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     setTimeout(() => {
       if (viewportRef.current) {
@@ -76,49 +67,39 @@ export const ChatPane = React.memo(({ currentDocument, onApplyToEditor }: ChatPa
     }, 100);
   }, []);
 
-  // ドキュメント変更時にチャット履歴を読み込む (DB初期化チェック追加)
   useEffect(() => {
     const loadHistory = async () => {
-      // DBが初期化されていない場合は処理しない
       if (!isDbInitialized) {
         console.log("ChatPane: DB not initialized, skipping history load.");
-        setIsHistoryLoading(false); // ローディング状態を解除
-        setMessages([]); // メッセージをクリア
+        setIsHistoryLoading(false);
+        setMessages([]);
         return;
       }
 
-      if (currentDocument?.id) {
-        setIsHistoryLoading(true);
-        setMessages([]);
-        console.log(`Loading chat history for document: ${currentDocument.id}`);
-        try {
-          const history = await getChatMessages(currentDocument.id);
-          setMessages(history);
-          scrollToBottom("auto");
-        } catch (error) {
-          console.error("Failed to load chat history:", error);
-          toast({
-            title: "エラー",
-            description: "チャット履歴の読み込みに失敗しました。",
-            variant: "destructive",
-          });
-        } finally {
-          setIsHistoryLoading(false);
-        }
-      } else {
-        setMessages([]);
+      setIsHistoryLoading(true);
+      setMessages([]);
+      console.log(`Loading chat history for document: ${currentDocument.id}`);
+      try {
+        const history = await getChatMessages(currentDocument.id);
+        setMessages(history);
+        scrollToBottom("auto");
+      } catch (error) {
+        console.error("Failed to load chat history:", error);
+        toast({
+          title: "エラー",
+          description: "チャット履歴の読み込みに失敗しました。",
+          variant: "destructive",
+        });
+      } finally {
         setIsHistoryLoading(false);
-        console.log("No current document or document ID, clearing chat history.");
       }
     };
     loadHistory();
-    // isDbInitialized を依存配列に追加
-  }, [currentDocument?.id, toast, scrollToBottom, isDbInitialized]);
+  }, [currentDocument.id, toast, scrollToBottom, isDbInitialized]);
 
-  // 新しいメッセージをDBに保存する関数 (DB初期化チェック追加)
   const saveMessage = useCallback(
     async (message: Omit<ChatMessageType, "id">) => {
-      if (!isDbInitialized || !currentDocument?.id) return; // DB初期化チェック
+      if (!isDbInitialized || !currentDocument?.id) return;
       try {
         await addChatMessage({ ...message, documentId: currentDocument.id });
       } catch (error) {
@@ -129,15 +110,13 @@ export const ChatPane = React.memo(({ currentDocument, onApplyToEditor }: ChatPa
           variant: "destructive",
         });
       }
-      // isDbInitialized を依存配列に追加
     },
     [currentDocument?.id, toast, isDbInitialized]
   );
 
-  // メッセージ送信処理 (変更なし)
   const handleSendMessage = useCallback(async () => {
     const prompt = inputValue.trim();
-    if (!prompt || isLoading || !currentDocument?.id || !isDbInitialized) return; // DB初期化チェック追加
+    if (!prompt || isLoading || !currentDocument?.id || !isDbInitialized) return;
 
     const newUserMessage: Omit<ChatMessageType, "id"> = {
       role: "user",
@@ -201,12 +180,10 @@ export const ChatPane = React.memo(({ currentDocument, onApplyToEditor }: ChatPa
       document.getElementById("chat-input")?.focus();
       scrollToBottom();
     }
-    // 依存配列に必要な state と関数を追加
   }, [inputValue, isLoading, currentDocument, isDbInitialized, toast, saveMessage, scrollToBottom]);
 
-  // チャット履歴クリア処理 (DB初期化チェック追加)
   const handleClearChat = useCallback(async () => {
-    if (!isDbInitialized || !currentDocument?.id) return; // DB初期化チェック
+    if (!isDbInitialized || !currentDocument?.id) return;
     try {
       await clearChatMessages(currentDocument.id);
       setMessages([]);
@@ -219,10 +196,8 @@ export const ChatPane = React.memo(({ currentDocument, onApplyToEditor }: ChatPa
         variant: "destructive",
       });
     }
-    // isDbInitialized を依存配列に追加
   }, [currentDocument?.id, toast, isDbInitialized]);
 
-  // コードをクリップボードにコピー (変更なし)
   const handleCopyCode = useCallback(
     (code: string | null | undefined, messageId: string) => {
       if (!code) return;
@@ -241,9 +216,8 @@ export const ChatPane = React.memo(({ currentDocument, onApplyToEditor }: ChatPa
         });
     },
     [toast]
-  ); // 依存配列に toast を追加
+  );
 
-  // コードをエディタに適用 (変更なし)
   const handleApplyCode = useCallback(
     (codeToApply: string | null | undefined) => {
       if (codeToApply) {
@@ -258,11 +232,10 @@ export const ChatPane = React.memo(({ currentDocument, onApplyToEditor }: ChatPa
       }
     },
     [onApplyToEditor, toast]
-  ); // 依存配列に onApplyToEditor, toast を追加
+  );
 
   return (
     <div className="flex h-full flex-col bg-background">
-      {/* ヘッダー */}
       <div className="flex flex-shrink-0 items-center justify-between border-b p-2">
         <div className="flex items-center gap-2">
           <MessageSquareIcon className="h-4 w-4 text-muted-foreground" />
@@ -306,7 +279,6 @@ export const ChatPane = React.memo(({ currentDocument, onApplyToEditor }: ChatPa
         </AlertDialog>
       </div>
 
-      {/* メッセージ表示エリア */}
       <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
         <div className="space-y-4">
           {isHistoryLoading && (
@@ -321,89 +293,32 @@ export const ChatPane = React.memo(({ currentDocument, onApplyToEditor }: ChatPa
           )}
           {!isHistoryLoading &&
             messages.map((message) => (
-              <div
+              <ChatMessageItem
                 key={message.id}
-                className={`flex items-end gap-2 ${
-                  message.role === "user" ? "justify-end" : "justify-start"
-                }`}
-              >
-                {message.role === "assistant" && (
-                  <Avatar className="h-6 w-6 flex-shrink-0 self-start">
-                    <AvatarFallback>
-                      <BotIcon className="h-4 w-4" />
-                    </AvatarFallback>
-                  </Avatar>
-                )}
-                {message.role !== "system" && (
-                  <div
-                    className={`max-w-[85%] rounded-lg p-3 md:max-w-[75%] ${
-                      message.role === "user"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-muted-foreground"
-                    } whitespace-pre-wrap break-words`}
-                  >
-                    {message.content}
-                    {message.role === "assistant" && message.markdownCode && (
-                      <div className="mt-2 flex flex-wrap gap-2 border-t border-muted-foreground/20 pt-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-xs"
-                          onClick={() => handleCopyCode(message.markdownCode, message.id)}
-                        >
-                          {copiedStates[message.id] ? (
-                            <CheckIcon className="mr-1 h-3 w-3" />
-                          ) : (
-                            <CopyIcon className="mr-1 h-3 w-3" />
-                          )}
-                          コードコピー
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-xs"
-                          onClick={() => handleApplyCode(message.markdownCode)}
-                          disabled={!message.markdownCode}
-                        >
-                          <ClipboardPasteIcon className="mr-1 h-3 w-3" />
-                          エディタに適用
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                )}
-                {message.role === "system" && (
-                  <div className="my-2 w-full rounded bg-destructive/10 px-2 py-1 text-center text-xs italic text-destructive">
-                    {message.content}
-                  </div>
-                )}
-                {message.role === "user" && (
-                  <Avatar className="h-6 w-6 flex-shrink-0">
-                    <AvatarFallback>
-                      <UserIcon className="h-4 w-4" />
-                    </AvatarFallback>
-                  </Avatar>
-                )}
-              </div>
+                message={message}
+                copiedStates={copiedStates}
+                onCopyCode={handleCopyCode}
+                onApplyCode={handleApplyCode}
+              />
             ))}
           {isLoading && !isHistoryLoading && (
-            <div className="flex items-end justify-start gap-2">
-              <Avatar className="h-6 w-6 flex-shrink-0 self-start">
-                <AvatarFallback>
-                  <BotIcon className="h-4 w-4" />
-                </AvatarFallback>
-              </Avatar>
-              <div className="max-w-[75%] rounded-lg bg-muted p-3">
-                <Skeleton className="flex h-4 w-16 items-center">
-                  <Loader2Icon className="h-3 w-3 animate-spin" />
-                </Skeleton>
-              </div>
-            </div>
+            <ChatMessageItem
+              message={{
+                id: "loading",
+                documentId: currentDocument.id,
+                role: "assistant",
+                content: "",
+                timestamp: new Date(),
+              }}
+              isBotLoading={true}
+              copiedStates={{}}
+              onCopyCode={() => {}}
+              onApplyCode={() => {}}
+            />
           )}
         </div>
       </ScrollArea>
 
-      {/* 入力エリア */}
       <div className="flex items-start gap-2 border-t p-4">
         <Textarea
           id="chat-input"
@@ -446,4 +361,4 @@ export const ChatPane = React.memo(({ currentDocument, onApplyToEditor }: ChatPa
   );
 });
 
-ChatPane.displayName = "ChatPane"; // displayName を設定
+ChatPane.displayName = "ChatPane";

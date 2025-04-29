@@ -1,18 +1,10 @@
-// VersionType と TemplateType を削除
 export interface DocumentType {
   id: string;
   title: string;
   content: string;
   createdAt: Date;
   updatedAt: Date;
-  // versions プロパティ削除
 }
-
-// VersionType 削除
-// export interface VersionType { ... }
-
-// TemplateType 削除
-// export interface TemplateType { ... }
 
 export interface ChatMessageType {
   id: string;

@@ -35,8 +35,8 @@ interface DocumentDropdownProps {
   currentDocument: DocumentType | null;
   onDocumentChange: (doc: DocumentType) => void;
   onCreateNew: () => void;
-  onRename: (id: string, newTitle: string) => Promise<void>; // Promise を返すように変更
-  onDelete: (id: string) => Promise<void>; // Promise を返すように変更
+  onRename: (id: string, newTitle: string) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
 }
 
 export function DocumentDropdown({
@@ -73,7 +73,6 @@ export function DocumentDropdown({
         setNewTitle("");
       } catch (error) {
         console.error("Rename failed:", error);
-        // エラー表示 (Toastなど)
       }
     }
   };
@@ -86,12 +85,9 @@ export function DocumentDropdown({
         setSelectedDocForDelete(null);
       } catch (error) {
         console.error("Delete failed:", error);
-        // エラー表示 (Toastなど)
       }
     }
   };
-
-  // ドキュメントリストを更新日時の降順でソート
   const sortedDocuments = [...documents].sort(
     (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()
   );
@@ -121,10 +117,9 @@ export function DocumentDropdown({
                 <DropdownMenuSub key={doc.id}>
                   <DropdownMenuSubTrigger
                     className={`justify-between ${currentDocument?.id === doc.id ? "bg-accent" : ""}`}
-                    onClick={() => onDocumentChange(doc)} // クリックで選択
+                    onClick={() => onDocumentChange(doc)}
                   >
                     <span className="truncate">{doc.title}</span>
-                    {/* サブメニューを開くアイコンはデフォルトで表示される */}
                   </DropdownMenuSubTrigger>
                   <DropdownMenuPortal>
                     <DropdownMenuSubContent>
@@ -139,7 +134,7 @@ export function DocumentDropdown({
                       <DropdownMenuItem
                         onClick={() => handleDeleteClick(doc)}
                         className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-                        disabled={documents.length <= 1} // 最後の1つは消せないようにする
+                        disabled={documents.length <= 1}
                       >
                         <TrashIcon className="mr-2 h-4 w-4" />
                         削除
@@ -155,7 +150,6 @@ export function DocumentDropdown({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Rename Dialog */}
       <Dialog open={isRenameDialogOpen} onOpenChange={setIsRenameDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -189,7 +183,6 @@ export function DocumentDropdown({
         </DialogContent>
       </Dialog>
 
-      {/* Delete Dialog */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>

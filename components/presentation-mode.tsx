@@ -15,34 +15,25 @@ export function PresentationMode({ markdown, onExit }: PresentationModeProps) {
   const [renderedHTML, setRenderedHTML] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
-  // Initialize Marp and render markdown
   useEffect(() => {
     const initializeAndRender = async () => {
       try {
-        // Import Marp dynamically
         const { Marp } = await import("@marp-team/marp-core");
-
-        // Create Marp instance
         const marp = new Marp({
           html: true,
           math: true,
           minifyCSS: false,
         });
 
-        // Add Marp directives if not present
         let processedMarkdown = markdown;
         if (!markdown.includes("marp: true")) {
           processedMarkdown = `---\nmarp: true\n---\n\n${markdown}`;
         }
-
-        // Render markdown to HTML
         const { html, css } = marp.render(processedMarkdown);
 
-        // Count slides
         const slideCount = (html.match(/<section/g) || []).length;
         setTotalSlides(slideCount);
 
-        // Combine HTML and CSS
         const fullHTML = `
           <!DOCTYPE html>
           <html>
@@ -71,7 +62,6 @@ export function PresentationMode({ markdown, onExit }: PresentationModeProps) {
 
     initializeAndRender();
 
-    // Add keyboard event listeners
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "ArrowRight" || e.key === " " || e.key === "PageDown") {
         goToNextSlide();
@@ -89,7 +79,6 @@ export function PresentationMode({ markdown, onExit }: PresentationModeProps) {
     };
   }, [markdown, onExit]);
 
-  // Navigate between slides
   const goToNextSlide = () => {
     if (currentSlide < totalSlides - 1) {
       setCurrentSlide(currentSlide + 1);

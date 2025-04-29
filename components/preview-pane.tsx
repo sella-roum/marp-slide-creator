@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useLayoutEffect } from "react"; // useRef, useLayoutEffect をインポート
+import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
 import { FileIcon, Loader2Icon, AlertCircleIcon } from "lucide-react";
 import { processMarkdownForRender } from "@/lib/markdown-processor";
 
@@ -8,17 +8,15 @@ interface PreviewPaneProps {
   markdown: string;
 }
 
-// React.memo でラップ
 export const PreviewPane = React.memo(({ markdown }: PreviewPaneProps) => {
   const [renderedHTML, setRenderedHTML] = useState("");
-  const [isLoading, setIsLoading] = useState(true); // Marp初期化用
-  const [isProcessing, setIsProcessing] = useState(false); // Markdown処理中用
+  const [isLoading, setIsLoading] = useState(true);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [marpInstance, setMarpInstance] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const iframeRef = useRef<HTMLIFrameElement>(null); // iframeへの参照
-  const previewScrollTopRef = useRef<number>(0); // プレビューのスクロール位置を保持
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const previewScrollTopRef = useRef<number>(0);
 
-  // Initialize Marp (変更なし)
   useEffect(() => {
     const initializeMarp = async () => {
       setIsLoading(true);
@@ -37,7 +35,6 @@ export const PreviewPane = React.memo(({ markdown }: PreviewPaneProps) => {
     initializeMarp();
   }, []);
 
-  // Render markdown with Marp
   useEffect(() => {
     if (!marpInstance) return;
 
@@ -52,19 +49,13 @@ export const PreviewPane = React.memo(({ markdown }: PreviewPaneProps) => {
       setIsProcessing(true);
       setError(null);
 
-      // --- ▼ スクロール位置の保存 ▼ ---
-      // renderedHTML を更新する前に現在のスクロール位置を取得
       const currentIframe = iframeRef.current;
       if (currentIframe && currentIframe.contentWindow) {
         previewScrollTopRef.current = currentIframe.contentWindow.scrollY;
-        // console.log("Saving preview scroll position:", previewScrollTopRef.current);
       }
-      // --- ▲ スクロール位置の保存 ▲ ---
 
       try {
-        // console.log("Processing markdown for preview...");
         const processedMarkdown = await processMarkdownForRender(markdown);
-        // console.log("Markdown processed.");
 
         let finalMarkdown = processedMarkdown;
         if (!finalMarkdown.includes("marp: true")) {
@@ -91,28 +82,22 @@ export const PreviewPane = React.memo(({ markdown }: PreviewPaneProps) => {
     };
 
     render();
-  }, [markdown, marpInstance]); // isProcessing は依存配列から削除済み
+  }, [markdown, marpInstance]);
 
-  // --- ▼ スクロール位置の復元 ▼ ---
-  // renderedHTML が更新された後、iframe の load イベントでスクロール位置を復元
   useLayoutEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe) return;
 
     const handleLoad = () => {
-      // console.log("Restoring preview scroll position to:", previewScrollTopRef.current);
       iframe.contentWindow?.scrollTo(0, previewScrollTopRef.current);
     };
 
-    iframe.addEventListener('load', handleLoad);
+    iframe.addEventListener("load", handleLoad);
 
-    // クリーンアップ関数
     return () => {
-      iframe.removeEventListener('load', handleLoad);
+      iframe.removeEventListener("load", handleLoad);
     };
-    // renderedHTML が変わるたびに load イベントリスナーを再設定
   }, [renderedHTML]);
-  // --- ▲ スクロール位置の復元 ▲ ---
 
   return (
     <div className="flex h-full flex-col">
@@ -124,37 +109,32 @@ export const PreviewPane = React.memo(({ markdown }: PreviewPaneProps) => {
       </div>
 
       <div className="relative flex-1 overflow-auto bg-gray-200 dark:bg-gray-900">
-        {/* 初期化中 */}
         {isLoading && (
           <div className="flex h-full items-center justify-center">
             <Loader2Icon className="h-8 w-8 animate-spin text-primary" />
           </div>
         )}
-        {/* 処理中 */}
         {!isLoading && isProcessing && (
           <div className="absolute inset-0 z-10 flex h-full items-center justify-center bg-white/50 dark:bg-black/50">
             <Loader2Icon className="h-8 w-8 animate-spin text-muted-foreground" />
             <p className="ml-2 text-muted-foreground">プレビューを更新中...</p>
           </div>
         )}
-        {/* エラー表示 */}
         {!isLoading && error && (
           <div className="flex h-full flex-col items-center justify-center p-4 text-center text-destructive">
             <AlertCircleIcon className="mb-2 h-8 w-8" />
             <p>{error}</p>
           </div>
         )}
-        {/* コンテンツ表示エリア */}
         {!isLoading && !error && (
           <div className={`h-full w-full p-4 ${isProcessing ? "opacity-50" : ""}`}>
             {renderedHTML ? (
               <iframe
-                ref={iframeRef} // iframe への参照を設定
+                ref={iframeRef}
                 srcDoc={renderedHTML}
                 className="h-full w-full rounded border-0 bg-white"
                 title="Marp Preview"
                 sandbox="allow-scripts allow-same-origin"
-                // onLoad は useLayoutEffect 内で処理するため削除
               />
             ) : markdown ? (
               <div className="flex h-full items-center justify-center text-muted-foreground">
@@ -173,4 +153,4 @@ export const PreviewPane = React.memo(({ markdown }: PreviewPaneProps) => {
   );
 });
 
-PreviewPane.displayName = "PreviewPane"; // displayName を設定
+PreviewPane.displayName = "PreviewPane";
