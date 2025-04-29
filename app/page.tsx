@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { Toaster } from "@/components/ui/toaster";
-import { useToast } from "@/hooks/use-toast";
 import { useDb } from "@/lib/db-context"; // useDb フックをインポート
 import { getDocument, updateDocument } from "@/lib/db";
 import type { DocumentType } from "@/lib/types";
@@ -14,10 +13,11 @@ import { MainLayout } from "@/components/main-layout"; // MainLayout をイン�
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 // 定数をインポート
 import { SINGLE_DOCUMENT_ID, type LayoutMode } from "@/lib/constants";
+import { useErrorHandler } from "@/hooks/use-error-handler"; // ★ インポート
 
 export default function Home() {
-  const { toast } = useToast();
   const { isDbInitialized, dbError } = useDb(); // DB初期化状態とエラーを取得
+  const { handleError } = useErrorHandler(); // ★ エラーハンドラフックを使用
   const [currentDocument, setCurrentDocument] = useState<DocumentType | null>(null);
   const [markdownContent, setMarkdownContent] = useState("");
   const [isChatVisible, setIsChatVisible] = useState(true);
@@ -29,13 +29,9 @@ export default function Home() {
   // DB初期化エラーハンドリング
   useEffect(() => {
     if (dbError) {
-      toast({
-        title: "データベースエラー",
-        description: `データベースの初期化に失敗しました: ${dbError.message}`,
-        variant: "destructive",
-      });
+      handleError({ error: dbError, context: "データベース初期化" }); // ★ 共通ハンドラを使用
     }
-  }, [dbError, toast]);
+  }, [dbError, handleError]); // ★ handleError を依存配列に追加
 
   // 単一ドキュメントの読み込み/作成
   const loadOrCreateSingleDocument = useCallback(async () => {
@@ -55,8 +51,8 @@ export default function Home() {
         };
         await updateDocument(newDocData);
         doc = await getDocument(SINGLE_DOCUMENT_ID);
-        if (doc) {
-          toast({ title: "新しいプレゼンテーションを作成しました" });
+        if (doc) { // ★ 成功時のトーストは任意
+          // toast({ title: "新しいプレゼンテーションを作成しました" });
         } else {
           throw new Error("Failed to create or retrieve the document after creation attempt.");
         }
@@ -71,25 +67,17 @@ export default function Home() {
           }
           return prevDoc;
         });
-      } else {
+      } else { // ★ このケースは上の if (!doc) で捕捉されるはず
         console.error("Failed to load or create the document.");
-        toast({
-          title: "エラー",
-          description: "ドキュメントの読み込み/作成に失敗",
-          variant: "destructive",
-        });
+        handleError({ error: new Error("Document is null after load/create attempt"), context: "ドキュメント読み込み/作成" });
       }
     } catch (error) {
-      console.error("Failed to load or create single document:", error);
-      if (!(error instanceof Error && error.message.includes("Database"))) {
-        toast({
-          title: "ドキュメントエラー",
-          description: error instanceof Error ? error.message : String(error),
-          variant: "destructive",
-        });
+      // DB初期化エラーは別途ハンドリングされるので、それ以外のエラーを処理
+      if (!(error instanceof Error && error.message.includes("Database"))) { // ★ DBエラー以外を処理
+        handleError({ error, context: "ドキュメント読み込み/作成" });
       }
     }
-  }, [isDbInitialized, toast]);
+  }, [isDbInitialized, handleError]); // ★ handleError を依存配列に追加
 
   // DB初期化後にドキュメント読み込み
   useEffect(() => {
@@ -215,7 +203,7 @@ export default function Home() {
     return (
       <main className="flex h-screen flex-col items-center justify-center">
         {dbError ? (
-          <div className="text-destructive">データベースエラー: {dbError.message}</div>
+          <div className="text-destructive">データベースエラーが発生しました。詳細はコンソールを確認してください。</div>
         ) : (
           <div>データベースを初期化中...</div>
         )}

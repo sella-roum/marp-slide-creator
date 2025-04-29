@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from "react"; // useRef, useLayoutEffect をインポート
 import { FileIcon, Loader2Icon, AlertCircleIcon } from "lucide-react";
 import { processMarkdownForRender } from "@/lib/markdown-processor";
+import { useErrorHandler } from "@/hooks/use-error-handler"; // ★ インポート
 
 interface PreviewPaneProps {
   markdown: string;
@@ -16,6 +17,7 @@ export const PreviewPane = React.memo(({ markdown }: PreviewPaneProps) => {
   const [marpInstance, setMarpInstance] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null); // iframeへの参照
+  const { handleError } = useErrorHandler(); // ★ エラーハンドラフックを使用
   const previewScrollTopRef = useRef<number>(0); // プレビューのスクロール位置を保持
 
   // Initialize Marp (変更なし)
@@ -28,14 +30,14 @@ export const PreviewPane = React.memo(({ markdown }: PreviewPaneProps) => {
         const marp = new Marp({ html: true, math: true, minifyCSS: false });
         setMarpInstance(marp);
       } catch (err) {
-        console.error("Failed to initialize Marp:", err);
         setError("Marpの初期化に失敗しました");
+        handleError({ error: err, context: "Marp初期化" }); // ★ 共通ハンドラを使用
       } finally {
         setIsLoading(false);
       }
     };
     initializeMarp();
-  }, []);
+  }, [handleError]); // ★ handleError を依存配列に追加
 
   // Render markdown with Marp
   useEffect(() => {
@@ -82,8 +84,8 @@ export const PreviewPane = React.memo(({ markdown }: PreviewPaneProps) => {
         const fullHTML = `<style>${css}${customCSS}</style>${html}`;
         setRenderedHTML(fullHTML);
       } catch (err) {
-        console.error("Failed to process or render markdown:", err);
         setError(`プレビュー生成エラー: ${err instanceof Error ? err.message : String(err)}`);
+        handleError({ error: err, context: "プレビュー生成" }); // ★ 共通ハンドラを使用
         setRenderedHTML("");
       } finally {
         setIsProcessing(false);
@@ -91,7 +93,7 @@ export const PreviewPane = React.memo(({ markdown }: PreviewPaneProps) => {
     };
 
     render();
-  }, [markdown, marpInstance]); // isProcessing は依存配列から削除済み
+  }, [markdown, marpInstance, handleError]); // ★ handleError を依存配列に追加
 
   // --- ▼ スクロール位置の復元 ▼ ---
   // renderedHTML が更新された後、iframe の load イベントでスクロール位置を復元

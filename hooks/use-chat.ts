@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useToast } from "@/hooks/use-toast";
 import type {
   DocumentType,
   GeminiRequestType,
@@ -11,6 +10,7 @@ import type {
 import { addChatMessage, getChatMessages, clearChatMessages } from "@/lib/db";
 import { useDb } from "@/lib/db-context";
 import { v4 as uuidv4 } from "uuid"; // uuid をインポート
+import { useErrorHandler } from "@/hooks/use-error-handler"; // ★ インポート
 
 interface UseChatProps {
   currentDocument: DocumentType | null;
@@ -18,8 +18,8 @@ interface UseChatProps {
 }
 
 export function useChat({ currentDocument, onApplyToEditor }: UseChatProps) {
-  const { toast } = useToast();
   const { isDbInitialized } = useDb();
+  const { handleError } = useErrorHandler(); // ★ エラーハンドラフックを使用
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -60,12 +60,7 @@ export function useChat({ currentDocument, onApplyToEditor }: UseChatProps) {
           setMessages(history);
           scrollToBottom("auto");
         } catch (error) {
-          console.error("Failed to load chat history:", error);
-          toast({
-            title: "エラー",
-            description: "チャット履歴の読み込みに失敗しました。",
-            variant: "destructive",
-          });
+          handleError({ error, context: "チャット履歴の読み込み" }); // ★ 共通ハンドラを使用
         } finally {
           setIsHistoryLoading(false);
         }
@@ -76,7 +71,7 @@ export function useChat({ currentDocument, onApplyToEditor }: UseChatProps) {
       }
     };
     loadHistory();
-  }, [currentDocument?.id, toast, scrollToBottom, isDbInitialized]);
+  }, [currentDocument?.id, scrollToBottom, isDbInitialized, handleError]); // ★ handleError を依存配列に追加
 
   // 新しいメッセージをDBに保存する関数
   const saveMessage = useCallback(
@@ -85,15 +80,10 @@ export function useChat({ currentDocument, onApplyToEditor }: UseChatProps) {
       try {
         await addChatMessage({ ...message, documentId: currentDocument.id });
       } catch (error) {
-        console.error("Failed to save chat message:", error);
-        toast({
-          title: "エラー",
-          description: "チャットメッセージの保存に失敗しました。",
-          variant: "destructive",
-        });
+        handleError({ error, context: "チャットメッセージの保存" }); // ★ 共通ハンドラを使用
       }
     },
-    [currentDocument?.id, toast, isDbInitialized]
+    [currentDocument?.id, isDbInitialized, handleError] // ★ handleError を依存配列に追加
   );
 
   // メッセージ送信処理
@@ -151,9 +141,9 @@ export function useChat({ currentDocument, onApplyToEditor }: UseChatProps) {
         throw new Error("AIからの応答が空でした。");
       }
     } catch (error) {
-      console.error("API Error:", error);
+      // console.error は handleError 内で行われる
       const errorContent = `エラー: ${error instanceof Error ? error.message : "AIとの通信中にエラーが発生しました。"}`;
-      toast({ title: "エラー", description: errorContent, variant: "destructive" });
+      handleError({ error, context: "AI応答の取得", userMessage: errorContent }); // ★ userMessage を指定
       const errorMessage: Omit<ChatMessageType, "id"> = {
         role: "system",
         content: errorContent,
@@ -174,9 +164,9 @@ export function useChat({ currentDocument, onApplyToEditor }: UseChatProps) {
     isLoading,
     currentDocument,
     isDbInitialized,
-    toast,
     saveMessage,
     scrollToBottom,
+    handleError, // ★ handleError を依存配列に追加
   ]);
 
   // チャット履歴クリア処理
@@ -185,16 +175,11 @@ export function useChat({ currentDocument, onApplyToEditor }: UseChatProps) {
     try {
       await clearChatMessages(currentDocument.id);
       setMessages([]);
-      toast({ title: "チャット履歴をクリアしました" });
+      // toast({ title: "チャット履歴をクリアしました" }); // 成功時のトーストは任意
     } catch (error) {
-      console.error("Failed to clear chat history:", error);
-      toast({
-        title: "エラー",
-        description: "チャット履歴のクリアに失敗しました。",
-        variant: "destructive",
-      });
+      handleError({ error, context: "チャット履歴のクリア" }); // ★ 共通ハンドラを使用
     }
-  }, [currentDocument?.id, toast, isDbInitialized]);
+  }, [currentDocument?.id, isDbInitialized, handleError]); // ★ handleError を依存配列に追加
 
   // コードをクリップボードにコピー
   const handleCopyCode = useCallback(
@@ -204,17 +189,16 @@ export function useChat({ currentDocument, onApplyToEditor }: UseChatProps) {
         .writeText(code)
         .then(() => {
           setCopiedStates((prev) => ({ ...prev, [messageId]: true }));
-          toast({ title: "コードをコピーしました" });
+          // toast({ title: "コードをコピーしました" }); // 成功時のトーストは任意
           setTimeout(() => {
             setCopiedStates((prev) => ({ ...prev, [messageId]: false }));
           }, 2000);
         })
         .catch((err) => {
-          console.error("コピー失敗:", err);
-          toast({ title: "コピーに失敗しました", variant: "destructive" });
+          handleError({ error: err, context: "コードのコピー" }); // ★ 共通ハンドラを使用
         });
     },
-    [toast]
+    [handleError] // ★ handleError を依存配列に追加
   );
 
   // コードをエディタに適用
@@ -222,16 +206,13 @@ export function useChat({ currentDocument, onApplyToEditor }: UseChatProps) {
     (codeToApply: string | null | undefined) => {
       if (codeToApply) {
         onApplyToEditor(codeToApply);
-        toast({ title: "抽出されたコードをエディタに適用しました" });
+        // toast({ title: "抽出されたコードをエディタに適用しました" }); // 成功時のトーストは任意
       } else {
-        toast({
-          title: "適用失敗",
-          description: "応答からMarpコードを抽出できませんでした。",
-          variant: "destructive",
-        });
+        // エラーではなく、適用できるコードがない場合の警告
+        console.warn("Attempted to apply code, but no markdown code was found in the message.");
       }
     },
-    [onApplyToEditor, toast]
+    [onApplyToEditor]
   );
 
   return {

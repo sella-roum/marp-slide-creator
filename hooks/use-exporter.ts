@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { useToast } from "@/hooks/use-toast";
 import { preprocessMarkdownForExport, generateInteractiveHtml } from "@/lib/exportUtils"; // 作成したユーティリティをインポート
 import { downloadFile } from "@/lib/utils"; // downloadFile は既存の utils から
 import type { ExportFormat } from "@/components/export-dialog"; // ExportFormat 型をインポート
+import { useErrorHandler } from "@/hooks/use-error-handler"; // ★ インポート
 
 interface UseExporterProps {
   markdown: string;
@@ -12,8 +12,8 @@ interface UseExporterProps {
 }
 
 export function useExporter({ markdown, documentTitle }: UseExporterProps) {
-  const { toast } = useToast();
   const [isExporting, setIsExporting] = useState(false);
+  const { handleError } = useErrorHandler(); // ★ エラーハンドラフックを使用
   const [exportFormat, setExportFormat] = useState<ExportFormat>("html");
   const [includeSpeakerNotes, setIncludeSpeakerNotes] = useState(false); // スピーカーノートの状態
   const [isDialogOpen, setIsDialogOpen] = useState(false); // ダイアログの開閉状態
@@ -21,11 +21,8 @@ export function useExporter({ markdown, documentTitle }: UseExporterProps) {
   // エクスポート処理
   const handleExport = useCallback(async () => {
     if (!markdown) {
-      toast({
-        title: "エラー",
-        description: "エクスポートするコンテンツがありません",
-        variant: "destructive",
-      });
+      // エラーというより警告レベル
+      console.warn("Export attempted with no markdown content.");
       return;
     }
 
@@ -37,7 +34,7 @@ export function useExporter({ markdown, documentTitle }: UseExporterProps) {
 
       if (exportFormat === "markdown") {
         downloadFile(processedMarkdown, `${documentTitle}.md`, "text/markdown");
-        toast({ title: "成功", description: `MARKDOWNとしてエクスポートしました` });
+        // toast({ title: "成功", description: `MARKDOWNとしてエクスポートしました` }); // 成功時のトーストは任意
       } else if (exportFormat === "html") {
         // Marp Core を動的にインポート
         const { Marp } = await import(/* webpackChunkName: "marp-core" */ "@marp-team/marp-core");
@@ -48,21 +45,17 @@ export function useExporter({ markdown, documentTitle }: UseExporterProps) {
         const fullHTML = generateInteractiveHtml(html, css, documentTitle);
 
         downloadFile(fullHTML, `${documentTitle}.html`, "text/html");
-        toast({ title: "成功", description: `HTMLとしてエクスポートしました` });
+        // toast({ title: "成功", description: `HTMLとしてエクスポートしました` }); // 成功時のトーストは任意
       }
 
       setIsDialogOpen(false); // 成功したらダイアログを閉じる
     } catch (error) {
-      console.error("Export failed:", error);
-      toast({
-        title: "エクスポート失敗",
-        description: `エクスポート中にエラー: ${error instanceof Error ? error.message : String(error)}`,
-        variant: "destructive",
-      });
+      handleError({ error, context: "ファイルのエクスポート" }); // ★ 共通ハンドラを使用
     } finally {
       setIsExporting(false);
     }
-  }, [markdown, documentTitle, exportFormat, toast]); // includeSpeakerNotes は未実装のため依存配列から除外
+  }, [markdown, documentTitle, exportFormat, handleError]); // ★ handleError を依存配列に追加
+  // includeSpeakerNotes は未実装のため依存配列から除外
 
   // ダイアログを開く関数 (フォーマット指定付き)
   const openExportDialog = useCallback((format: ExportFormat) => {

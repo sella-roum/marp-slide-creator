@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useToast } from "@/hooks/use-toast";
 import { useDb } from "@/lib/db-context";
 import { updateDocument } from "@/lib/db";
 import { debounce } from "@/lib/utils";
 import type { DocumentType } from "@/lib/types";
+import { useErrorHandler } from "@/hooks/use-error-handler"; // ★ インポート
 
 interface UseAutoSaveProps {
   document: DocumentType | null;
@@ -14,8 +14,8 @@ interface UseAutoSaveProps {
 }
 
 export function useAutoSave({ document, content, delay = 1000 }: UseAutoSaveProps) {
-  const { toast } = useToast();
   const { isDbInitialized } = useDb();
+  const { handleError } = useErrorHandler(); // ★ エラーハンドラフックを使用
   const [isSaving, setIsSaving] = useState(false);
   const [lastSavedContent, setLastSavedContent] = useState<string | null>(null);
 
@@ -46,8 +46,7 @@ export function useAutoSave({ document, content, delay = 1000 }: UseAutoSaveProp
         setLastSavedContent(currentContent); // 保存成功したら最後に保存した内容を更新
         console.log("useAutoSave: Document saved successfully.");
       } catch (error) {
-        console.error("useAutoSave: Failed to save document:", error);
-        toast({ title: "エラー", description: "ドキュメントの自動保存に失敗しました", variant: "destructive" });
+        handleError({ error, context: "ドキュメント自動保存" }); // ★ 共通ハンドラを使用
         // 保存失敗時は isSaving を解除するが、lastSavedContent は更新しない
       } finally {
         setIsSaving(false);
@@ -79,7 +78,7 @@ export function useAutoSave({ document, content, delay = 1000 }: UseAutoSaveProp
     //   debouncedSave.cancel?.(); // もし debounce 関数に cancel メソッドがあれば
     // };
 
-  }, [content, document, isDbInitialized, debouncedSave, lastSavedContent]); // lastSavedContent も依存配列に追加
+  }, [content, document, isDbInitialized, debouncedSave, lastSavedContent, handleError]); // ★ handleError を依存配列に追加
 
   // isSaving 状態を返す
   return { isSaving };

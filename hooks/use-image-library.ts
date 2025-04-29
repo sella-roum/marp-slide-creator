@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useToast } from "@/hooks/use-toast";
 import type { ImageType } from "@/lib/types";
 import { addImage, getImages, deleteImage } from "@/lib/db";
 import { useDb } from "@/lib/db-context";
 import { imageToBase64 } from "@/lib/utils";
+import { useErrorHandler } from "@/hooks/use-error-handler"; // ★ インポート
 
 interface UseImageLibraryProps {
   isOpen: boolean; // ダイアログが開いているかどうかの状態
@@ -20,8 +20,8 @@ export function useImageLibrary({ isOpen, onInsertReference, closeDialog }: UseI
   const [error, setError] = useState<string | null>(null);
   const [copiedStates, setCopiedStates] = useState<Record<string, boolean>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { toast } = useToast();
   const { isDbInitialized } = useDb();
+  const { handleError } = useErrorHandler(); // ★ エラーハンドラフックを使用
 
   // 画像読み込み関数
   const loadImages = useCallback(async () => {
@@ -39,17 +39,12 @@ export function useImageLibrary({ isOpen, onInsertReference, closeDialog }: UseI
       const loadedImages = await getImages();
       setImages(loadedImages);
     } catch (err) {
-      console.error("Failed to load images:", err);
       setError("画像の読み込みに失敗しました。");
-      toast({
-        title: "エラー",
-        description: "画像の読み込みに失敗しました。",
-        variant: "destructive",
-      });
+      handleError({ error: err, context: "画像ライブラリの読み込み" }); // ★ 共通ハンドラを使用
     } finally {
       setIsLoading(false);
     }
-  }, [toast, isDbInitialized]);
+  }, [isDbInitialized, handleError]); // ★ handleError を依存配列に追加
 
   // ダイアログが開かれたときに画像を読み込む
   useEffect(() => {
@@ -73,11 +68,10 @@ export function useImageLibrary({ isOpen, onInsertReference, closeDialog }: UseI
   const handleImageUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (!isDbInitialized) {
-        toast({
-          title: "エラー",
-          description: "データベース未初期化のためアップロードできません。",
-          variant: "destructive",
-        });
+        // エラーハンドラを呼ぶほどではないかもしれないが、ログは出す
+        console.warn("useImageLibrary: DB not initialized, cannot upload.");
+        // 必要ならトーストも出す
+        // handleError({ error: new Error("Database not initialized"), context: "画像アップロード", userMessage: "データベース未初期化のためアップロードできません。" });
         return;
       }
       const files = e.target.files;
@@ -93,34 +87,26 @@ export function useImageLibrary({ isOpen, onInsertReference, closeDialog }: UseI
           dataUrl: dataUrl,
         };
         await addImage(imageData);
-        toast({ title: "成功", description: `画像「${file.name}」をアップロードしました。` });
+        // toast({ title: "成功", description: `画像「${file.name}」をアップロードしました。` }); // 成功時のトーストは任意
         await loadImages(); // アップロード後にリストを再読み込み
       } catch (err) {
-        console.error("Failed to upload image:", err);
-        toast({
-          title: "エラー",
-          description: "画像のアップロードに失敗しました。",
-          variant: "destructive",
-        });
+        handleError({ error: err, context: "画像アップロード" }); // ★ 共通ハンドラを使用
       } finally {
         setIsUploading(false);
         if (fileInputRef.current) {
-          fileInputRef.current.value = "";
+          fileInputRef.current.value = ""; // ファイル選択をリセット
         }
       }
     },
-    [isDbInitialized, loadImages, toast]
+    [isDbInitialized, loadImages, handleError] // ★ handleError を依存配列に追加
   );
 
   // 画像削除処理
   const handleDeleteImage = useCallback(
     async (id: string, name: string) => {
       if (!isDbInitialized) {
-        toast({
-          title: "エラー",
-          description: "データベース未初期化のため削除できません。",
-          variant: "destructive",
-        });
+        console.warn("useImageLibrary: DB not initialized, cannot delete.");
+        // handleError({ error: new Error("Database not initialized"), context: "画像削除", userMessage: "データベース未初期化のため削除できません。" });
         return;
       }
       // confirm はブラウザ標準のブロッキングな関数なので、より良いUI（AlertDialogなど）を検討する余地あり
@@ -129,18 +115,13 @@ export function useImageLibrary({ isOpen, onInsertReference, closeDialog }: UseI
       }
       try {
         await deleteImage(id);
-        toast({ title: "成功", description: `画像「${name}」を削除しました。` });
+        // toast({ title: "成功", description: `画像「${name}」を削除しました。` }); // 成功時のトーストは任意
         setImages((prev) => prev.filter((img) => img.id !== id));
       } catch (err) {
-        console.error("Failed to delete image:", err);
-        toast({
-          title: "エラー",
-          description: "画像の削除に失敗しました。",
-          variant: "destructive",
-        });
+        handleError({ error: err, context: "画像削除" }); // ★ 共通ハンドラを使用
       }
     },
-    [isDbInitialized, toast]
+    [isDbInitialized, handleError] // ★ handleError を依存配列に追加
   );
 
   // 参照文字列を挿入
@@ -149,9 +130,9 @@ export function useImageLibrary({ isOpen, onInsertReference, closeDialog }: UseI
       const reference = `![${image.name}](image://${image.id})`;
       onInsertReference(reference);
       closeDialog(); // ダイアログを閉じる
-      toast({ title: "画像参照を挿入しました", description: reference });
+      // toast({ title: "画像参照を挿入しました", description: reference }); // 成功時のトーストは任意
     },
-    [onInsertReference, closeDialog, toast]
+    [onInsertReference, closeDialog]
   );
 
   // 参照文字列をコピー
@@ -162,17 +143,16 @@ export function useImageLibrary({ isOpen, onInsertReference, closeDialog }: UseI
         .writeText(reference)
         .then(() => {
           setCopiedStates((prev) => ({ ...prev, [image.id]: true }));
-          toast({ title: "参照文字列をコピーしました" });
+          // toast({ title: "参照文字列をコピーしました" }); // 成功時のトーストは任意
           setTimeout(() => {
             setCopiedStates((prev) => ({ ...prev, [image.id]: false }));
           }, 2000);
         })
         .catch((err) => {
-          console.error("コピー失敗:", err);
-          toast({ title: "コピーに失敗しました", variant: "destructive" });
+          handleError({ error: err, context: "画像参照のコピー" }); // ★ 共通ハンドラを使用
         });
     },
-    [toast]
+    [handleError] // ★ handleError を依存配列に追加
   );
 
   // ファイル選択ダイアログを開く
