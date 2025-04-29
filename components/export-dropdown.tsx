@@ -67,8 +67,10 @@ export const ExportDropdown = React.memo(({ markdown, documentTitle }: ExportDro
       if (exportFormat === "html") {
         const { Marp } = await import(/* webpackChunkName: "marp-core" */ "@marp-team/marp-core");
         const marp = new Marp({ html: true, math: true, minifyCSS: false });
+        // Marp Core は複数の <svg> を含む <div class="marpit"> を返す
         const { html, css } = marp.render(processedMarkdown);
 
+        // --- ▼▼▼ 修正されたCSSとJavaScript ▼▼▼ ---
         const interactiveCSS = `
           html, body {
             margin: 0;
@@ -259,6 +261,7 @@ export const ExportDropdown = React.memo(({ markdown, documentTitle }: ExportDro
             }
           });
         `;
+        // --- ▲▲▲ 修正されたCSSとJavaScript ▲▲▲ ---
 
         const fullHTML = `<!DOCTYPE html>
 <html>

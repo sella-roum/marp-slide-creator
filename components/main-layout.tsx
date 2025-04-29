@@ -7,9 +7,14 @@ interface MainLayoutProps {
   isChatVisible: boolean;
   isEditorVisible: boolean;
   isPreviewVisible: boolean;
-  chatPanel: React.ReactNode;
-  editorPanel: React.ReactNode;
-  previewPanel: React.ReactNode;
+  renderChatPanel: () => React.ReactNode;
+  renderEditorPanel: () => React.ReactNode;
+  renderPreviewPanel: () => React.ReactNode;
+  renderEditorPreviewGroup: (
+    direction: "vertical" | "horizontal",
+    defaultSize: number,
+    order: number
+  ) => React.ReactNode;
 }
 
 export const MainLayout: React.FC<MainLayoutProps> = React.memo(
@@ -18,30 +23,12 @@ export const MainLayout: React.FC<MainLayoutProps> = React.memo(
     isChatVisible,
     isEditorVisible,
     isPreviewVisible,
-    chatPanel,
-    editorPanel,
-    previewPanel,
+    renderChatPanel,
+    renderEditorPanel,
+    renderPreviewPanel,
+    renderEditorPreviewGroup, // この関数は editor-bottom では直接使わない可能性あり
   }) => {
-    const renderEditorPreviewGroup = (
-      direction: "vertical" | "horizontal",
-      defaultSize: number,
-      order: number
-    ) =>
-      (isEditorVisible || isPreviewVisible) && (
-        <ResizablePanel
-          id={`editor-preview-group-${layoutMode}`}
-          order={order}
-          defaultSize={defaultSize}
-          minSize={30}
-        >
-          <ResizablePanelGroup direction={direction}>
-            {isEditorVisible && editorPanel}
-            {isEditorVisible && isPreviewVisible && <ResizableHandle withHandle />}
-            {isPreviewVisible && previewPanel}
-          </ResizablePanelGroup>
-        </ResizablePanel>
-      );
-
+    // チャット/プレビューグループをレンダリングするヘルパー関数 (editor-bottom用)
     const renderChatPreviewGroup = (direction: "horizontal", defaultSize: number, order: number) =>
       (isChatVisible || isPreviewVisible) && (
         <ResizablePanel
@@ -51,9 +38,9 @@ export const MainLayout: React.FC<MainLayoutProps> = React.memo(
           minSize={30}
         >
           <ResizablePanelGroup direction={direction}>
-            {isChatVisible && chatPanel}
+            {renderChatPanel()}
             {isChatVisible && isPreviewVisible && <ResizableHandle withHandle />}
-            {isPreviewVisible && previewPanel}
+            {renderPreviewPanel()}
           </ResizablePanelGroup>
         </ResizablePanel>
       );
@@ -62,7 +49,7 @@ export const MainLayout: React.FC<MainLayoutProps> = React.memo(
       <div className="flex-1 overflow-hidden border-t">
         {layoutMode === "default" && (
           <ResizablePanelGroup direction="horizontal">
-            {isChatVisible && chatPanel}
+            {renderChatPanel()}
             {isChatVisible && (isEditorVisible || isPreviewVisible) && (
               <ResizableHandle withHandle />
             )}
@@ -75,34 +62,38 @@ export const MainLayout: React.FC<MainLayoutProps> = React.memo(
             {(isEditorVisible || isPreviewVisible) && isChatVisible && (
               <ResizableHandle withHandle />
             )}
-            {isChatVisible && chatPanel}
+            {renderChatPanel()}
           </ResizablePanelGroup>
         )}
         {layoutMode === "horizontal" && (
           <ResizablePanelGroup direction="horizontal">
-            {isChatVisible && chatPanel}
+            {renderChatPanel()}
             {isChatVisible && isEditorVisible && <ResizableHandle withHandle />}
-            {isEditorVisible && editorPanel}
+            {renderEditorPanel()}
             {isEditorVisible && isPreviewVisible && <ResizableHandle withHandle />}
-            {isPreviewVisible && previewPanel}
+            {renderPreviewPanel()}
           </ResizablePanelGroup>
         )}
         {layoutMode === "editor-focused" && (
           <ResizablePanelGroup direction="vertical">
-            {isEditorVisible && editorPanel}
+            {renderEditorPanel()}
             {isEditorVisible && (isChatVisible || isPreviewVisible) && (
               <ResizableHandle withHandle />
             )}
+            {/* editor-focused ではチャット/プレビューが下に来る */}
             {renderChatPreviewGroup("horizontal", isEditorVisible ? 50 : 100, 2)}
           </ResizablePanelGroup>
         )}
+        {/* 新しい editor-bottom レイアウト */}
         {layoutMode === "editor-bottom" && (
           <ResizablePanelGroup direction="vertical">
+            {/* チャット/プレビューを上に配置 (order=1) */}
             {renderChatPreviewGroup("horizontal", isEditorVisible ? 50 : 100, 1)}
+            {/* エディタパネルを下に配置 (order=2) */}
             {(isChatVisible || isPreviewVisible) && isEditorVisible && (
               <ResizableHandle withHandle />
             )}
-            {isEditorVisible && editorPanel}
+            {renderEditorPanel()}
           </ResizablePanelGroup>
         )}
       </div>
