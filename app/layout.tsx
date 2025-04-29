@@ -4,6 +4,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { DbProvider } from "@/lib/db-context"; // DbProvider をインポート
+import ErrorBoundary from "@/components/error-boundary"; // ★ ErrorBoundary をインポート
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -27,7 +28,12 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           {/* DbProvider でラップ */}
-          <DbProvider>{children}</DbProvider>
+          <DbProvider>
+            {/* ★ ErrorBoundary で children をラップ */}
+            <ErrorBoundary>
+              {children}
+            </ErrorBoundary>
+          </DbProvider>
         </ThemeProvider>
       </body>
     </html>

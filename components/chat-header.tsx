@@ -45,7 +45,7 @@ export const ChatHeader = React.memo(
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 px-2"
+              className="h-4 px-2"
               disabled={
                 !currentDocument ||
                 messages.length === 0 ||
