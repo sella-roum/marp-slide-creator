@@ -1,28 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react"; // useLayoutEffect をインポート
-import { Button } from "@/components/ui/button";
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react";
 import { Textarea } from "@/components/ui/textarea";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { FileIcon } from "lucide-react";
 import type { DocumentType } from "@/lib/types";
-import { updateDocument } from "@/lib/db";
-import { debounce } from "@/lib/utils";
-import { useToast } from "@/hooks/use-toast";
-import { useDb } from "@/lib/db-context"; // useDb フックをインポート
-import {
-  LinkIcon,
-  CodeIcon,
-  ListIcon,
-  BoldIcon,
-  ItalicIcon,
-  Heading1Icon,
-  Heading2Icon,
-  QuoteIcon,
-  SeparatorHorizontalIcon,
-  FileIcon,
-  ImagePlusIcon,
-} from "lucide-react";
-import { ImageLibrary } from "./image-library";
+import { useDb } from "@/lib/db-context";
+import { useAutoSave } from "@/hooks/use-auto-save"; // 自動保存フックをインポート
+import { EditorToolbar, type EditorToolbarAction } from "./editor-toolbar"; // ツールバーコンポーネントをインポート
 
 interface EditorPaneProps {
   markdown: string;
@@ -32,13 +16,14 @@ interface EditorPaneProps {
 
 // React.memo でラップ
 export const EditorPane = React.memo(({ markdown, onChange, currentDocument }: EditorPaneProps) => {
-  const { toast } = useToast();
   const { isDbInitialized } = useDb(); // DB初期化状態を取得
-  const [isSaving, setIsSaving] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const editorScrollTopRef = useRef<number>(0); // スクロール位置を保持するref
 
-  // Insert text at cursor position (useCallback でメモ化)
+  // 自動保存フックを使用
+  const { isSaving } = useAutoSave({ document: currentDocument, content: markdown });
+
+  // カーソル位置にテキストを挿入する関数 (変更なし)
   const insertTextAtCursor = useCallback(
     (textBefore: string, textAfter = "") => {
       if (!textareaRef.current) return;
@@ -52,8 +37,7 @@ export const EditorPane = React.memo(({ markdown, onChange, currentDocument }: E
         selectedText +
         textAfter +
         textarea.value.substring(end);
-      onChange(newText); // onChange は props なので依存配列に追加
-      // フォーカスとカーソル位置設定は setTimeout 内なのでメモ化の影響は限定的
+      onChange(newText);
       setTimeout(() => {
         if (textareaRef.current) {
           textareaRef.current.focus();
@@ -63,53 +47,19 @@ export const EditorPane = React.memo(({ markdown, onChange, currentDocument }: E
       }, 0);
     },
     [onChange]
-  ); // onChange を依存配列に追加
+  );
 
-  // 画像参照を挿入する関数 (useCallback でメモ化)
+  // 画像参照を挿入する関数 (変更なし)
   const handleInsertImageReference = useCallback(
     (reference: string) => {
       insertTextAtCursor(reference);
     },
     [insertTextAtCursor]
-  ); // insertTextAtCursor を依存配列に追加
+  );
 
-  // Save document with debounce (DB初期化チェック追加)
-  const debouncedSave = useRef(
-    debounce(async (documentData: DocumentType) => {
-      if (!isDbInitialized) {
-        // DB初期化チェック
-        console.warn("EditorPane: DB not initialized, skipping save.");
-        return;
-      }
-      try {
-        setIsSaving(true);
-        await updateDocument(documentData);
-      } catch (error) {
-        console.error("Failed to save document:", error);
-        toast({ title: "エラー", description: "ドキュメント保存失敗", variant: "destructive" });
-      } finally {
-        setIsSaving(false);
-      }
-    }, 1000)
-  ).current;
-
-  // Save document when content changes (DB初期化チェック追加)
-  useEffect(() => {
-    // DBが初期化されてから保存処理を行う
-    if (isDbInitialized && currentDocument && markdown !== currentDocument.content) {
-      const docToSave: DocumentType = {
-        ...currentDocument,
-        content: markdown,
-        updatedAt: new Date(),
-      };
-      debouncedSave(docToSave);
-    }
-    // isDbInitialized を依存配列に追加
-  }, [markdown, currentDocument, debouncedSave, isDbInitialized]);
-
-  // Handle toolbar actions (useCallback でメモ化)
+  // ツールバーのアクションハンドラ (変更なし)
   const handleToolbarAction = useCallback(
-    (action: string) => {
+    (action: EditorToolbarAction) => {
       switch (action) {
         case "h1":
           insertTextAtCursor("# ");
@@ -143,29 +93,34 @@ export const EditorPane = React.memo(({ markdown, onChange, currentDocument }: E
           break;
         case "image-url":
           const url = prompt("画像URLを入力してください:");
-          if (url) insertTextAtCursor(`![画像](${url})`);
+          // 簡単なURL形式チェックを追加（より厳密なチェックも可能）
+          if (url && (url.startsWith("http://") || url.startsWith("https://"))) {
+            insertTextAtCursor(`![画像](${url})`);
+          } else if (url) {
+            alert("有効なURLを入力してください (http:// または https:// で始まる必要があります)。");
+          }
           break;
         default:
+          // 未知のアクションに対する処理（必要であれば）
+          console.warn("Unknown toolbar action:", action);
           break;
       }
     },
     [insertTextAtCursor]
-  ); // insertTextAtCursor を依存配列に追加
+  );
 
-  // --- スクロール位置の保持 ---
-  // スクロールイベントで現在の位置をrefに保存
+  // スクロール位置の保持 (変更なし)
   const handleScroll = useCallback(() => {
     if (textareaRef.current) {
       editorScrollTopRef.current = textareaRef.current.scrollTop;
     }
   }, []);
 
-  // markdownが変更された後にスクロール位置を復元
   useLayoutEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.scrollTop = editorScrollTopRef.current;
     }
-  }, [markdown]); // markdown が更新された後に実行
+  }, [markdown]);
 
   // Render
   if (!currentDocument) {
@@ -179,128 +134,36 @@ export const EditorPane = React.memo(({ markdown, onChange, currentDocument }: E
 
   return (
     <div className="flex h-full flex-col">
+      {/* ヘッダー: ドキュメントタイトルと保存状態表示 */}
       <div className="flex items-center justify-between border-b p-2">
-        <h3 className="truncate text-sm font-medium">{currentDocument.title}</h3>
+        <h3 className="truncate text-sm font-medium" title={currentDocument.title}>
+          {currentDocument.title}
+        </h3>
         <div className="flex items-center space-x-1 text-xs text-muted-foreground">
+          {/* isSaving は useAutoSave フックから取得 */}
           {isSaving ? "保存中..." : "保存済み"}
         </div>
       </div>
 
-      <div className="flex items-center overflow-x-auto border-b p-1">
-        <TooltipProvider>
-          {/* ツールバーボタン */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={() => handleToolbarAction("h1")}>
-                <Heading1Icon className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>見出し1</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={() => handleToolbarAction("h2")}>
-                <Heading2Icon className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>見出し2</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={() => handleToolbarAction("bold")}>
-                <BoldIcon className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>太字</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={() => handleToolbarAction("italic")}>
-                <ItalicIcon className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>斜体</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={() => handleToolbarAction("link")}>
-                <LinkIcon className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>リンク</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={() => handleToolbarAction("list")}>
-                <ListIcon className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>リスト</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={() => handleToolbarAction("quote")}>
-                <QuoteIcon className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>引用</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={() => handleToolbarAction("code")}>
-                <CodeIcon className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>コードブロック</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={() => handleToolbarAction("hr")}>
-                <SeparatorHorizontalIcon className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>スライド区切り</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={() => handleToolbarAction("image-url")}>
-                <LinkIcon className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>画像URLを挿入</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <ImageLibrary onInsertReference={handleInsertImageReference} />
-            </TooltipTrigger>
-            <TooltipContent>画像ライブラリを開く</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleToolbarAction("marp-directive")}
-              >
-                Marp
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Marpディレクティブ挿入</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
+      {/* ツールバーコンポーネントをレンダリング */}
+      <EditorToolbar
+        onAction={handleToolbarAction}
+        onInsertImageReference={handleInsertImageReference}
+      />
 
+      {/* テキストエリア */}
       <Textarea
         ref={textareaRef}
         value={markdown}
-        onChange={(e) => onChange(e.target.value)} // onChange は props なので直接渡す
-        onScroll={handleScroll} // スクロールイベントハンドラを追加
+        onChange={(e) => onChange(e.target.value)}
+        onScroll={handleScroll}
         className="flex-1 resize-none rounded-none border-0 p-4 font-mono text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
         placeholder="Marpプレゼンテーションを作成するには、ここに入力を始めてください..."
         disabled={!isDbInitialized} // DB初期化中は無効化
+        aria-label="Markdown Editor" // アクセシビリティのためのラベル
       />
     </div>
   );
 });
 
-EditorPane.displayName = "EditorPane"; // displayName を設定
+EditorPane.displayName = "EditorPane";
