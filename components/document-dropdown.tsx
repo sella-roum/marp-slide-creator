@@ -100,7 +100,11 @@ export function DocumentDropdown({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="min-w-[150px] justify-between">
+          <Button
+            variant="outline"
+            className="min-w-[150px] justify-between"
+            aria-label={`現在のドキュメント: ${currentDocument ? currentDocument.title : 'ドキュメント選択'}, ドキュメントメニューを開く`}
+          >
             <span className="max-w-[120px] truncate">
               {currentDocument ? currentDocument.title : "ドキュメント選択"}
             </span>
@@ -110,7 +114,7 @@ export function DocumentDropdown({
         <DropdownMenuContent className="w-56" align="end">
           <DropdownMenuLabel>ドキュメント操作</DropdownMenuLabel>
           <DropdownMenuItem onClick={onCreateNew}>
-            <FilePlusIcon className="mr-2 h-4 w-4" />
+            <FilePlusIcon className="mr-2 h-4 w-4" aria-hidden="true" />
             <span>新規作成</span>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
@@ -128,20 +132,20 @@ export function DocumentDropdown({
                   </DropdownMenuSubTrigger>
                   <DropdownMenuPortal>
                     <DropdownMenuSubContent>
-                      <DropdownMenuItem onClick={() => onDocumentChange(doc)}>
-                        <FileIcon className="mr-2 h-4 w-4" />
+                      <DropdownMenuItem onClick={() => onDocumentChange(doc)} aria-label={`ドキュメント「${doc.title}」を開く`}>
+                        <FileIcon className="mr-2 h-4 w-4" aria-hidden="true" />
                         開く
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleRenameClick(doc)}>
-                        <EditIcon className="mr-2 h-4 w-4" />
+                      <DropdownMenuItem onClick={() => handleRenameClick(doc)} aria-label={`ドキュメント「${doc.title}」の名前を変更`}>
+                        <EditIcon className="mr-2 h-4 w-4" aria-hidden="true" />
                         名前を変更
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => handleDeleteClick(doc)}
-                        className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                        className="text-destructive focus:bg-destructive/10 focus:text-destructive" aria-label={`ドキュメント「${doc.title}」を削除`}
                         disabled={documents.length <= 1} // 最後の1つは消せないようにする
                       >
-                        <TrashIcon className="mr-2 h-4 w-4" />
+                        <TrashIcon className="mr-2 h-4 w-4" aria-hidden="true" />
                         削除
                       </DropdownMenuItem>
                     </DropdownMenuSubContent>

@@ -109,9 +109,9 @@ export function PresentationMode({ markdown, onExit }: PresentationModeProps) {
           variant="outline"
           size="icon"
           onClick={onExit}
-          className="border-white/20 bg-black/50 text-white hover:bg-black/70"
+          className="border-white/20 bg-black/50 text-white hover:bg-black/70" aria-label="プレゼンテーションモードを終了"
         >
-          <XIcon className="h-4 w-4" />
+          <XIcon className="h-4 w-4" aria-hidden="true" />
         </Button>
       </div>
 
@@ -121,9 +121,9 @@ export function PresentationMode({ markdown, onExit }: PresentationModeProps) {
           size="icon"
           onClick={goToPrevSlide}
           disabled={currentSlide === 0}
-          className="border-white/20 bg-black/50 text-white hover:bg-black/70"
+          className="border-white/20 bg-black/50 text-white hover:bg-black/70" aria-label="前のスライドへ"
         >
-          <ChevronLeftIcon className="h-4 w-4" />
+          <ChevronLeftIcon className="h-4 w-4" aria-hidden="true" />
         </Button>
 
         <span className="rounded bg-black/50 px-3 py-1 text-sm text-white">
@@ -135,9 +135,9 @@ export function PresentationMode({ markdown, onExit }: PresentationModeProps) {
           size="icon"
           onClick={goToNextSlide}
           disabled={currentSlide === totalSlides - 1}
-          className="border-white/20 bg-black/50 text-white hover:bg-black/70"
+          className="border-white/20 bg-black/50 text-white hover:bg-black/70" aria-label="次のスライドへ"
         >
-          <ChevronRightIcon className="h-4 w-4" />
+          <ChevronRightIcon className="h-4 w-4" aria-hidden="true" />
         </Button>
       </div>
 

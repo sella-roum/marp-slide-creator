@@ -11,92 +11,90 @@ import {
 import type { GeminiRequestType, GeminiResponseType } from "@/lib/types"; // 型定義は外部にあると仮定
 import { extractMarkdownCode } from "@/lib/utils"; // 外部関数と仮定
 
-// Initialize Google Generative AI with API key
+// 環境変数からGoogle Gemini APIキーを取得
 const API_KEY = process.env.GEMINI_API_KEY;
 
-export async function POST(request: NextRequest) {
+// POSTリクエストハンドラ
+export async function POST(request: NextRequest): Promise<NextResponse<GeminiResponseType>> {
   try {
-    // Check if API key is available
+    // APIキーの存在チェック
     if (!API_KEY) {
-      console.error("Gemini API key is not configured");
+      console.error("Gemini API key is not configured.");
       return NextResponse.json(
         {
           success: false,
           error: {
-            message: "API key is not configured",
+            message: "API key is not configured.",
             code: "API_KEY_MISSING",
           },
-        } as GeminiResponseType,
-        { status: 500 }
+        },
+        { status: 500 } // サーバー側の設定エラー
       );
     }
 
-    // Parse request body
+    // リクエストボディのパース
     const requestData: GeminiRequestType = await request.json();
     const { prompt, context, taskType } = requestData;
 
-    // Validate request
+    // プロンプトの検証
     if (!prompt) {
+      console.error("Prompt is required.");
       return NextResponse.json(
         {
           success: false,
           error: {
-            message: "Prompt is required",
+            message: "Prompt is required.",
             code: "MISSING_PROMPT",
           },
-        } as GeminiResponseType,
-        { status: 400 }
+        },
+        { status: 400 } // 不正なリクエスト
       );
     }
 
-    // Initialize the Gemini API client
+    // Google Gemini APIクライアントの初期化
     const ai = new GoogleGenAI({ apiKey: API_KEY });
+    const modelName = "gemini-2.0-flash"; // 使用するモデル名（必要に応じて変更）
 
     // --- システムプロンプトの構築 ---
-    // systemInstruction に渡すため、Content オブジェクト形式にする
-    const systemInstructionContent: Content = {
-      role: "system", // またはモデルによっては "user" の最初のターンとして扱う
-      parts: [
-        {
-          text: `You are an AI assistant specialized in helping users create Marp presentations.
+    let systemInstructionText = `You are an AI assistant specialized in helping users create Marp presentations.
 Marp is a Markdown-based presentation tool.
 
-When responding:
-1. Always provide Markdown code that is compatible with Marp.
-2. Wrap code blocks in triple backticks with 'markdown' or 'marp' label.
-3. Include appropriate Marp directives like '---\\nmarp: true\\ntheme: default\\n---' at the beginning of presentations.
-4. For slide separators, use '---' on a line by itself.
-5. If asked for a theme, provide CSS that can be used with Marp's theme directive.
-6. Respond in Japanese unless specifically asked to use another language.
+When generating content:
+- Always provide Markdown code that is compatible with Marp.
+- Wrap all generated code blocks, including the main presentation content, in triple backticks (\`\`\`) with 'markdown' or 'marp' label.
+- Include appropriate Marp directives (like \`---\\nmarp: true\\ntheme: default\\n---\`) at the very beginning of the presentation Markdown.
+- Use \`---\` on a line by itself for slide separators.
+- If asked for a theme, provide only the CSS content wrapped in a single markdown block with 'css' label, explaining how to use it with Marp's theme directive.
+- Respond primarily in Japanese, unless the user explicitly requests another language.
 
-Current user's Markdown content:
+Current user's Markdown content (for context, if applicable):
 \`\`\`
 ${context?.currentMarkdown || "No content yet"}
 \`\`\`
-`, // context が undefined の可能性を考慮
-        },
-      ],
-    };
 
-    // タスク固有の指示をシステムプロンプトに追加
-    let taskInstruction = "";
+User's specific request: "${prompt}"
+`;
+
+    // タスクタイプに基づく追加の指示
     if (taskType) {
       switch (taskType) {
         case "GenerateOutline":
-          taskInstruction = `\nFocus on creating a well-structured presentation outline with appropriate sections and slide transitions.`;
+          systemInstructionText += `\nBased on the user's request and current content, generate a well-structured outline for a Marp presentation using Markdown headers and slide separators. Provide only the Markdown outline.`;
           break;
         case "GenerateTheme":
-          taskInstruction = `\nFocus on creating a custom CSS theme for Marp. Include detailed styling for backgrounds, text, headers, and other elements.`;
+          systemInstructionText += `\nBased on the user's request, generate a custom CSS theme for Marp. Provide only the CSS code wrapped in a markdown block with 'css' label.`;
           break;
         case "GenerateMermaid":
-          taskInstruction = `\nCreate a Mermaid diagram that can be embedded in a Marp presentation. Use the syntax: \`\`\`mermaid\n(diagram code)\n\`\`\``;
+          systemInstructionText += `\nBased on the user's request, generate a Mermaid diagram. Provide only the Mermaid code wrapped in a markdown block with 'mermaid' label.`;
           break;
-      }
-      // systemInstructionContent の parts[0].text に追記
-      if (systemInstructionContent.parts && systemInstructionContent.parts[0].text) {
-        systemInstructionContent.parts[0].text += taskInstruction;
+        // 他のタスクタイプに対応する指示を追加
       }
     }
+
+    const systemInstructionContent: Content = {
+      role: "system",
+      parts: [{ text: systemInstructionText }],
+    };
     // --- システムプロンプト構築ここまで ---
 
     // --- ユーザープロンプトの準備 ---
@@ -107,121 +105,150 @@ ${context?.currentMarkdown || "No content yet"}
     // --- ユーザープロンプト準備ここまで ---
 
     try {
-      // --- generateContent の呼び出し修正 ---
+      // generateContent の呼び出し
       const generationConfig: GenerateContentConfig = {
-        // 必要に応じて temperature, topK, topP などを設定
-        // responseMimeType: "application/json", // 必要ならJSON出力を指定
+        // モデルの応答設定をここに追加（任意）
+        // temperature: 0.9,
+        // topK: 1,
+        // topP: 0.95,
+        // maxOutputTokens: 8192, // 例: 最大トークン数を設定
+        // responseMimeType: taskType === "GenerateTheme" || taskType === "GenerateMermaid" ? "text/plain" : "text/plain", // 明示的に指定
         // safetySettings: [...] // 必要ならセーフティ設定
       };
 
       const response: GenerateContentResponse = await ai.models.generateContent({
-        model: "gemini-2.0-flash", // モデル名 (必要なら変更)
-        // systemInstruction を config に渡す (推奨)
-        // または contents の最初に role: "system" で渡す (モデルによる)
-        // 今回は systemInstruction を使用しない例として、contents に含める
+        model: modelName,
         contents: [userContent], // ユーザープロンプトのみを渡す
         config: {
           ...generationConfig,
           systemInstruction: systemInstructionContent, // systemInstruction を config に設定
         },
       });
-      // --- 呼び出し修正ここまで ---
 
-      // --- レスポンス処理の修正 ---
-      const resultText = response.text; // .text アクセサを使用
-      // console.log("Raw response text:", resultText); // デバッグ用ログ
+      // レスポンステキストを取得
+      const resultText = response.text;
 
-      // レスポンスが空またはブロックされた場合のチェック
-      if (!resultText) {
-        console.error("モデルからの応答が空またはブロックされました。");
-        if (response.promptFeedback?.blockReason) {
-          const blockReason = response.promptFeedback.blockReason;
-          console.error(`リクエストがブロックされました: ${blockReason}`);
+      // レスポンスが空またはブロックされた場合のチェックを修正
+      if (!response.candidates || response.candidates.length === 0) {
+         console.error("Model returned no candidates.");
+         // プロンプトフィードバックによるブロック理由を確認
+         if (response.promptFeedback?.blockReason) {
+            const blockReason = response.promptFeedback.blockReason;
+            const blockMessage = response.promptFeedback.blockReasonMessage || "Content blocked by safety settings.";
+            console.error(`Request blocked. Reason: ${blockReason}, Message: ${blockMessage}`);
+            return NextResponse.json(
+              {
+                success: false,
+                error: {
+                  message: `Request blocked: ${blockMessage}`,
+                  code: `BLOCKED_CONTENT_${blockReason}`, // より具体的なコードを返す
+                  details: response.promptFeedback, // フィードバック詳細を返す
+                },
+              },
+              { status: 400 } // クライアントの入力に問題がある可能性が高いので400
+            );
+         }
+         // その他の理由で候補がゼロの場合
+          console.error("Model returned no valid candidates.");
           return NextResponse.json(
             {
               success: false,
               error: {
-                message: `Request blocked due to: ${blockReason}`,
-                code: "BLOCKED_CONTENT",
+                message: "AI model did not return valid candidates.",
+                code: "NO_VALID_CANDIDATES",
+                 details: response, // レスポンス全体をログ/デバッグ用に戻す
               },
-            } as GeminiResponseType,
-            { status: 400 } // Bad Request が適切か
-          );
-        }
-        // candidates が空、または content がない場合も考慮
-        if (
-          !response.candidates ||
-          response.candidates.length === 0 ||
-          !response.candidates[0].content
-        ) {
-          console.error("モデルから有効なコンテンツが得られませんでした。");
-          return NextResponse.json(
-            {
-              success: false,
-              error: {
-                message: "AI model did not return valid content.",
-                code: "NO_VALID_CONTENT",
-              },
-            } as GeminiResponseType,
+            },
             { status: 500 }
           );
-        }
-        // その他の理由で空の場合
-        return NextResponse.json(
-          {
-            success: false,
-            error: {
-              message: "AI model returned an empty response.",
-              code: "EMPTY_RESPONSE",
-            },
-          } as GeminiResponseType,
-          { status: 500 }
-        );
       }
-      // --- レスポンス処理修正ここまで ---
 
-      // Extract markdown code if present
-      const markdownCode = extractMarkdownCode(resultText); // resultText を渡す
+      // candidates.content または response.text が存在しない場合もエラーとする
+      // response.text アクセサは最初の候補のtext部分を返すので、これを確認すれば十分なことが多い
+      if (!resultText) {
+           console.error("Model returned candidates but no text content.");
+             return NextResponse.json(
+              {
+                success: false,
+                error: {
+                  message: "AI model returned candidates but no text content.",
+                  code: "NO_TEXT_CONTENT",
+                   details: response, // レスポンス全体をログ/デバッグ用に戻す
+                },
+              },
+              { status: 500 }
+            );
+      }
 
-      // Return response
+
+      // 外部関数を使用してMarkdownコードを抽出
+      const markdownCode = extractMarkdownCode(resultText);
+
+      // 成功レスポンス
       return NextResponse.json({
         success: true,
         result: {
-          text: resultText, // resultText を使用
-          markdownCode,
+          text: resultText,
+          markdownCode: markdownCode || resultText, // 抽出できなくても元のテキストをフォールバックとして返す
         },
-      } as GeminiResponseType);
-    } catch (genaiError) {
-      console.error("Gemini API error:", genaiError);
-      // エラーオブジェクトの詳細を出力
-      if (genaiError instanceof Error) {
-        console.error("API Error Details:", JSON.stringify(genaiError, null, 2));
+      });
+
+    } catch (genaiError: any) {
+      // Gemini API呼び出し中に発生したエラー
+      console.error("Gemini API call error:", genaiError);
+
+      // エラー詳細をログに出力 (SDKのエラー構造に依存)
+      const errorDetails: any = {
+           name: genaiError.name,
+           message: genaiError.message,
+           stack: process.env.NODE_ENV !== 'production' ? genaiError.stack : undefined, // 開発環境のみスタックトレース
+      };
+      if (genaiError.cause) {
+          console.error("API Error Cause:", genaiError.cause);
+          errorDetails.cause = genaiError.cause.message || genaiError.cause; // causeの詳細も取得
       }
+      if (genaiError.status) {
+           console.error("API Error Status:", genaiError.status);
+           errorDetails.apiStatus = genaiError.status; // HTTPステータスコード
+      }
+       if (genaiError.error) { // APIからのエラーレスポンスボディ
+           console.error("API Error Body:", genaiError.error);
+            errorDetails.apiError = genaiError.error; // APIから返されたエラーボディ
+      }
+
 
       return NextResponse.json(
         {
           success: false,
           error: {
-            message: genaiError instanceof Error ? genaiError.message : "Gemini API error",
-            code: "GEMINI_API_ERROR",
-            // 可能であればエラーの詳細を追加
-            details: genaiError instanceof Error ? JSON.stringify(genaiError) : undefined,
+            message: genaiError.message || "An error occurred while calling the Gemini API.",
+            code: genaiError.code || "GEMINI_API_ERROR", // 可能であればSDKのエラーコードを使用
+            details: errorDetails,
           },
-        } as GeminiResponseType,
-        { status: 500 } // APIエラーは 500 Internal Server Error または 502 Bad Gateway が適切か
+        },
+        { status: genaiError.status || 500 } // APIエラーのステータスコードを使用、なければ500
       );
     }
-  } catch (error) {
+
+  } catch (error: any) {
+    // その他のサーバーサイドエラー（リクエストパース失敗など）
     console.error("Server error:", error);
+
+     const errorDetails: any = {
+         name: error.name,
+         message: error.message,
+         stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined, // 開発環境のみスタックトレース
+      };
 
     return NextResponse.json(
       {
         success: false,
         error: {
-          message: error instanceof Error ? error.message : "Unknown server error",
+          message: error.message || "An unknown server error occurred.",
           code: "SERVER_ERROR",
+          details: errorDetails,
         },
-      } as GeminiResponseType,
+      },
       { status: 500 }
     );
   }

@@ -6,7 +6,7 @@ import { DB_NAME, DB_VERSION, DOC_STORE, CHAT_STORE, IMAGE_STORE } from "./const
 let db: IDBDatabase | null = null;
 let initializePromise: Promise<void> | null = null; // 初期化処理中のPromise
 
-// --- DB初期化関数 (重複実行防止とContext連携のため修正) ---
+// --- DB初期化関数 (変更なし) ---
 export function initializeDB(): Promise<void> {
   // すでに初期化済みか初期化中なら既存のPromiseを返す
   if (db) {
@@ -23,7 +23,7 @@ export function initializeDB(): Promise<void> {
     request.onerror = (event) => {
       console.error("Database open error:", request.error);
       initializePromise = null; // エラー時はPromiseをリセット
-      reject(new Error(`Failed to open IndexedDB: ${request.error?.message}`));
+      reject(new Error(`Failed to open IndexedDB: ${request.error?.message ?? "Unknown error"}`));
     };
 
     request.onsuccess = (event) => {
@@ -52,6 +52,9 @@ export function initializeDB(): Promise<void> {
 
       if (!transaction) {
         console.error("Upgrade transaction is null!");
+        // アップグレードエラー時もPromiseをリセットすべきか検討
+        // initializePromise = null;
+        reject(new Error("Upgrade transaction is null"));
         return;
       }
 
@@ -94,6 +97,7 @@ export function initializeDB(): Promise<void> {
         console.error("Database upgrade transaction error:", transaction.error);
         // アップグレードエラー時もPromiseをリセットすべきか検討
         // initializePromise = null;
+        // reject は request.onerror で処理される
       };
     };
 
@@ -109,17 +113,17 @@ export function initializeDB(): Promise<void> {
 
 // --- ヘルパー関数: トランザクション取得 (DB接続チェック強化) ---
 function getStore(storeName: string, mode: IDBTransactionMode): IDBObjectStore {
-  // DB接続が確立していることを前提とする (initializeDBは事前に呼び出される想定)
+  // DB接続チェックを強化
   if (!db) {
-    console.error("Attempted to get store, but database is not initialized or connection lost.");
-    // ここでエラーを投げるか、再接続を試みるかはアプリケーションの要件による
-    // 再接続を試みる場合:
-    // throw new Error("Database connection lost. Please try again.");
-    // または initializeDB().then(() => getStore(storeName, mode)).catch(...) のような処理
-    throw new Error("Database not initialized or connection lost.");
+    // initializeDB が完了していないか、接続が失われた可能性
+    console.error("Database is not initialized or connection lost.");
+    // 呼び出し元でハンドリングできるようエラーを投げる
+    throw new Error("Database is not initialized. Please ensure DbProvider is mounted and initialized.");
   }
+
   try {
     const transaction = db.transaction(storeName, mode);
+    // エラーログは残すが、Promise の reject は各操作で行う
     transaction.onerror = (event) =>
       console.error(`Transaction error on ${storeName}:`, (event.target as IDBTransaction).error);
     transaction.onabort = (event) =>
@@ -127,25 +131,24 @@ function getStore(storeName: string, mode: IDBTransactionMode): IDBObjectStore {
     return transaction.objectStore(storeName);
   } catch (e) {
     console.error(`Failed to start transaction on ${storeName}:`, e);
-    // DB接続が失われている可能性を考慮
     if (
       e instanceof DOMException &&
       (e.name === "InvalidStateError" || e.name === "TransactionInactiveError")
     ) {
-      console.warn("Database connection might be closed or transaction inactive.");
+      console.warn("Database connection might be closed or transaction inactive. Resetting connection state.");
       db = null; // 接続をリセット
       initializePromise = null;
-      // 再度 initializeDB を呼ぶか、ユーザーにリロードを促す
-      throw new Error("Database connection lost or transaction inactive. Please try again.");
+      // 呼び出し元でリトライするか、ユーザーに通知する必要がある
+      throw new Error("Database connection lost or transaction inactive. Please try again or reload the page.");
     }
-    throw e;
+    throw e; // その他のエラーはそのまま投げる
   }
 }
 
-// --- ドキュメント関連関数 (initializeDB呼び出し削除) ---
+// --- ドキュメント関連関数 ---
 
 export async function getDocument(id: string): Promise<DocumentType | null> {
-  // await initializeDB(); // 削除
+  // DB接続チェックは getStore 内で行われる
   const store = getStore(DOC_STORE, "readonly");
   return new Promise((resolve, reject) => {
     const request = store.get(id);
@@ -162,70 +165,119 @@ export async function getDocument(id: string): Promise<DocumentType | null> {
         resolve(null);
       }
     };
-    request.onerror = () => reject(request.error);
+    // エラーハンドリングを強化
+    request.onerror = (event) => {
+        console.error(`Failed to get document ${id}:`, request.error);
+        reject(request.error ?? new Error(`Failed to get document ${id}`));
+    };
   });
 }
 
 export async function updateDocument(doc: DocumentType): Promise<void> {
-  // await initializeDB(); // 削除
   const docToUpdate = {
     ...doc,
-    createdAt: new Date(doc.createdAt),
-    updatedAt: new Date(doc.updatedAt),
+    createdAt: new Date(doc.createdAt), // Dateオブジェクトに変換
+    updatedAt: new Date(), // 更新日時を現在時刻に
   };
   const store = getStore(DOC_STORE, "readwrite");
   return new Promise((resolve, reject) => {
     const request = store.put(docToUpdate);
     request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
+    // エラーハンドリングを強化
+    request.onerror = (event) => {
+        console.error(`Failed to update document ${doc.id}:`, request.error);
+        reject(request.error ?? new Error(`Failed to update document ${doc.id}`));
+    };
   });
 }
 
+// deleteDocumentAndRelatedData: トランザクション全体の reject を確認
 export async function deleteDocumentAndRelatedData(documentId: string): Promise<void> {
-  // await initializeDB(); // 削除
-  if (!db) throw new Error("Database not initialized"); // DB接続チェックは残す
+  // DB接続チェックは getStore を使う前に必要
+  if (!db) {
+      throw new Error("Database is not initialized. Please ensure DbProvider is mounted and initialized.");
+  }
 
   return new Promise((resolve, reject) => {
+    // トランザクション開始前に db が null でないことを保証
     const transaction = db!.transaction([DOC_STORE, CHAT_STORE], "readwrite");
     const docStore = transaction.objectStore(DOC_STORE);
     const chatStore = transaction.objectStore(CHAT_STORE);
 
+    let docDeleteError: DOMException | null = null;
+    let chatDeleteError: DOMException | null = null;
+    let chatDeleteCount = 0;
+
     const docDeleteReq = docStore.delete(documentId);
-    docDeleteReq.onerror = () => console.error("Error deleting document:", docDeleteReq.error);
+    docDeleteReq.onerror = (event) => {
+        console.error("Error deleting document:", docDeleteReq.error);
+        docDeleteError = docDeleteReq.error;
+        // エラーが発生してもトランザクションは継続される可能性がある
+    };
 
     const chatIndex = chatStore.index("documentId");
     const chatCursorReq = chatIndex.openKeyCursor(IDBKeyRange.only(documentId));
+
     chatCursorReq.onsuccess = (event) => {
       const cursor = (event.target as IDBRequest<IDBCursor | null>).result;
       if (cursor) {
-        chatStore.delete(cursor.primaryKey).onerror = (e) =>
-          console.error("Error deleting chat message:", (e.target as IDBRequest).error);
+        const deleteRequest = chatStore.delete(cursor.primaryKey); // chatStore を使う
+        deleteRequest.onsuccess = () => {
+            chatDeleteCount++;
+        };
+        deleteRequest.onerror = (e) => {
+          const error = (e.target as IDBRequest).error;
+          console.error("Error deleting chat message:", error);
+          if (!chatDeleteError) chatDeleteError = error; // 最初のエラーのみ記録
+          // エラーが発生してもカーソルを進める（部分的な成功を許容）
+        };
         cursor.continue();
       }
+      // カーソルが終了しても、ここではまだトランザクション完了ではない
     };
-    chatCursorReq.onerror = () => console.error("Error opening chat cursor:", chatCursorReq.error);
+    chatCursorReq.onerror = (event) => {
+        console.error("Error opening chat cursor:", chatCursorReq.error);
+        chatDeleteError = chatCursorReq.error;
+        // カーソル取得エラーは致命的なのでトランザクションを中断させる
+        if (transaction.abort) {
+            try { transaction.abort(); } catch (abortError) { console.error("Error aborting transaction:", abortError); }
+        }
+        reject(chatCursorReq.error ?? new Error("Error opening chat cursor"));
+    };
 
     transaction.oncomplete = () => {
-      console.log(`Document ${documentId} and related chat data deleted successfully.`);
-      resolve();
+      // 個別の操作でエラーがあったか確認
+      if (docDeleteError || chatDeleteError) {
+        console.warn(`Transaction completed, but errors occurred during deletion for document ${documentId}. Doc error: ${docDeleteError}, Chat error: ${chatDeleteError}`);
+        // 部分的な成功として resolve するか、エラーとして reject するか選択
+        // ここでは警告ログに留め、resolve する
+        resolve();
+      } else {
+        console.log(`Document ${documentId} and ${chatDeleteCount} related chat messages deleted successfully.`);
+        resolve();
+      }
     };
     transaction.onerror = (event) => {
-      console.error("Error deleting document and related chat data:", transaction.error);
-      reject(transaction.error);
+      console.error("Transaction error deleting document and related chat data:", transaction.error);
+      reject(transaction.error ?? new Error("Transaction error during deletion"));
     };
     transaction.onabort = (event) => {
+      // onabort は onerror の後、または手動で abort() を呼んだ場合に発生
       console.error("Transaction aborted while deleting document:", transaction.error);
-      reject(transaction.error ?? new Error("Transaction aborted"));
+      // chatCursorReq.onerror で既に reject されている可能性があるので、ここでは reject しないか、
+      // reject する場合は重複しないように注意が必要。
+      // reject(transaction.error ?? new Error("Transaction aborted during deletion"));
     };
   });
 }
 
-// --- チャットメッセージ関連関数 (initializeDB呼び出し削除) ---
+
+// --- チャットメッセージ関連関数 ---
 export async function addChatMessage(
   message: Omit<ChatMessageType, "id"> & { documentId: string }
 ): Promise<string> {
-  // await initializeDB(); // 削除
   const id = uuidv4();
+  // timestamp が Date オブジェクトであることを確認
   const newMessage: ChatMessageType = { ...message, id, timestamp: new Date(message.timestamp) };
   const store = getStore(CHAT_STORE, "readwrite");
   return new Promise((resolve, reject) => {
@@ -233,44 +285,45 @@ export async function addChatMessage(
     request.onsuccess = () => resolve(id);
     request.onerror = (event) => {
       console.error("Failed to add chat message:", request.error);
-      reject(request.error);
+      reject(request.error ?? new Error("Failed to add chat message")); // reject を確実に行う
     };
   });
 }
 
 export async function getChatMessages(documentId: string): Promise<ChatMessageType[]> {
-  // await initializeDB(); // 削除
   const store = getStore(CHAT_STORE, "readonly");
   const index = store.index("docId_ts");
   // タイムスタンプの範囲をより安全に
-  const lowerBound = new Date(0);
-  const upperBound = new Date(Date.now() + 60000); // 1分未来まで許容
+  const lowerBound = new Date(0); // 最小日付
+  const upperBound = new Date(Date.now() + 60000); // 現在時刻 + 1分 (未来のタイムスタンプを許容)
   const range = IDBKeyRange.bound([documentId, lowerBound], [documentId, upperBound]);
   return new Promise((resolve, reject) => {
     const request = index.getAll(range);
     request.onsuccess = () => {
+      // 結果を Date オブジェクトに変換し、ソート
       const sortedMessages = (request.result as any[])
         .map((msg) => ({
           ...msg,
-          timestamp: new Date(msg.timestamp),
+          timestamp: new Date(msg.timestamp), // Dateオブジェクトに変換
         }))
         .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
       resolve(sortedMessages as ChatMessageType[]);
     };
     request.onerror = (event) => {
       console.error("Failed to get chat messages:", request.error);
-      reject(request.error);
+      reject(request.error ?? new Error("Failed to get chat messages")); // reject を確実に行う
     };
   });
 }
 
 export async function clearChatMessages(documentId: string): Promise<void> {
-  // await initializeDB(); // 削除
   const store = getStore(CHAT_STORE, "readwrite");
   const index = store.index("documentId");
   const range = IDBKeyRange.only(documentId);
   return new Promise((resolve, reject) => {
     let deleteCount = 0;
+    let firstError: DOMException | null = null; // 最初のエラーを記録
+
     const cursorRequest = index.openCursor(range);
     cursorRequest.onsuccess = (event) => {
       const cursor = (event.target as IDBRequest<IDBCursorWithValue | null>).result;
@@ -280,91 +333,99 @@ export async function clearChatMessages(documentId: string): Promise<void> {
           deleteCount++;
         };
         deleteRequest.onerror = (e) => {
-          console.error("Error deleting record:", (e.target as IDBRequest).error);
-          /* エラーでもカーソルを進める */ cursor.continue();
+          const error = (e.target as IDBRequest).error;
+          console.error("Error deleting record:", error);
+          if (!firstError) firstError = error; // 最初のエラーのみ記録
+          // エラーが発生しても処理を続ける（部分的な成功を許容）
         };
         cursor.continue();
       } else {
-        console.log(`Cleared ${deleteCount} chat messages for document ${documentId}`);
-        resolve();
+        // カーソル完了
+        if (firstError) {
+          // 1つでもエラーがあれば reject するか、警告ログに留めるか
+          console.warn(`Cleared ${deleteCount} chat messages for document ${documentId}, but encountered errors.`);
+          // reject(firstError); // エラーとして扱う場合
+          resolve(); // 部分成功として扱う場合
+        } else {
+          console.log(`Cleared ${deleteCount} chat messages for document ${documentId}`);
+          resolve();
+        }
       }
     };
     cursorRequest.onerror = (event) => {
       console.error("Failed to open cursor for clearing chat messages:", cursorRequest.error);
-      reject(cursorRequest.error);
+      reject(cursorRequest.error ?? new Error("Failed to open cursor for clearing chat messages"));
     };
   });
 }
 
-// --- 画像関連関数 (initializeDB呼び出し削除) ---
+// --- 画像関連関数 ---
 export async function addImage(imageData: Omit<ImageType, "id" | "createdAt">): Promise<string> {
-  // await initializeDB(); // 削除
-  const id = uuidv4();
-  const newImage: ImageType = { ...imageData, id, createdAt: new Date() };
-  const store = getStore(IMAGE_STORE, "readwrite");
-  return new Promise((resolve, reject) => {
-    const request = store.add(newImage);
-    request.onsuccess = () => resolve(id);
-    request.onerror = (event) => {
-      console.error("Failed to add image:", request.error);
-      reject(request.error);
-    };
-  });
+    const id = uuidv4();
+    const newImage: ImageType = { ...imageData, id, createdAt: new Date() };
+    const store = getStore(IMAGE_STORE, "readwrite");
+    return new Promise((resolve, reject) => {
+        const request = store.add(newImage);
+        request.onsuccess = () => resolve(id);
+        request.onerror = (event) => {
+            console.error("Failed to add image:", request.error);
+            reject(request.error ?? new Error("Failed to add image"));
+        };
+    });
 }
 
 export async function getImages(): Promise<ImageType[]> {
-  // await initializeDB(); // 削除
-  const store = getStore(IMAGE_STORE, "readonly");
-  const index = store.index("createdAt");
-  return new Promise((resolve, reject) => {
-    const request = index.openCursor(null, "prev"); // 最新のものから取得
-    const images: ImageType[] = [];
-    request.onsuccess = (event) => {
-      const cursor = (event.target as IDBRequest<IDBCursorWithValue | null>).result;
-      if (cursor) {
-        const img = cursor.value as any;
-        images.push({ ...img, createdAt: new Date(img.createdAt) });
-        cursor.continue();
-      } else {
-        resolve(images);
-      }
-    };
-    request.onerror = (event) => {
-      console.error("Failed to get images:", request.error);
-      reject(request.error);
-    };
-  });
+    const store = getStore(IMAGE_STORE, "readonly");
+    const index = store.index("createdAt");
+    return new Promise((resolve, reject) => {
+        const request = index.openCursor(null, "prev"); // 最新のものから取得
+        const images: ImageType[] = [];
+        request.onsuccess = (event) => {
+            const cursor = (event.target as IDBRequest<IDBCursorWithValue | null>).result;
+            if (cursor) {
+                const img = cursor.value as any;
+                // createdAt が Date オブジェクトであることを保証
+                images.push({ ...img, createdAt: new Date(img.createdAt) });
+                cursor.continue();
+            } else {
+                resolve(images);
+            }
+        };
+        request.onerror = (event) => {
+            console.error("Failed to get images:", request.error);
+            reject(request.error ?? new Error("Failed to get images"));
+        };
+    });
 }
 
 export async function getImage(id: string): Promise<ImageType | null> {
-  // await initializeDB(); // 削除
-  const store = getStore(IMAGE_STORE, "readonly");
-  return new Promise((resolve, reject) => {
-    const request = store.get(id);
-    request.onsuccess = () => {
-      const img = request.result;
-      if (img) {
-        resolve({ ...img, createdAt: new Date(img.createdAt) } as ImageType);
-      } else {
-        resolve(null);
-      }
-    };
-    request.onerror = (event) => {
-      console.error(`Failed to get image ${id}:`, request.error);
-      reject(request.error);
-    };
-  });
+    const store = getStore(IMAGE_STORE, "readonly");
+    return new Promise((resolve, reject) => {
+        const request = store.get(id);
+        request.onsuccess = () => {
+            const img = request.result;
+            if (img) {
+                // createdAt が Date オブジェクトであることを保証
+                resolve({ ...img, createdAt: new Date(img.createdAt) } as ImageType);
+            } else {
+                resolve(null);
+            }
+        };
+        request.onerror = (event) => {
+            console.error(`Failed to get image ${id}:`, request.error);
+            reject(request.error ?? new Error(`Failed to get image ${id}`));
+        };
+    });
 }
 
 export async function deleteImage(id: string): Promise<void> {
-  // await initializeDB(); // 削除
-  const store = getStore(IMAGE_STORE, "readwrite");
-  return new Promise((resolve, reject) => {
-    const request = store.delete(id);
-    request.onsuccess = () => resolve();
-    request.onerror = (event) => {
-      console.error(`Failed to delete image ${id}:`, request.error);
-      reject(request.error);
-    };
-  });
+    const store = getStore(IMAGE_STORE, "readwrite");
+    return new Promise((resolve, reject) => {
+        const request = store.delete(id);
+        request.onsuccess = () => resolve();
+        request.onerror = (event) => {
+            console.error(`Failed to delete image ${id}:`, request.error);
+            reject(request.error ?? new Error(`Failed to delete image ${id}`));
+        };
+    });
 }

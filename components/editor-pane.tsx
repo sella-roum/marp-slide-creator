@@ -5,8 +5,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { FileIcon } from "lucide-react";
 import type { DocumentType } from "@/lib/types";
 import { useDb } from "@/lib/db-context";
-import { useAutoSave } from "@/hooks/use-auto-save"; // 自動保存フックをインポート
-import { EditorToolbar, type EditorToolbarAction } from "./editor-toolbar"; // ツールバーコンポーネントをインポート
+// import { useAutoSave } from "@/hooks/use-auto-save"; // useAutoSave は削除
+import { useDebounce } from "@/hooks/use-debounce"; // 作成した useDebounce フックをインポート
+import { updateDocument } from "@/lib/db"; // updateDocument を直接使用
+import { useErrorHandler } from "@/hooks/use-error-handler"; // エラーハンドラをインポート
+import { EditorToolbar } from "./editor-toolbar";
 
 interface EditorPaneProps {
   markdown: string;
@@ -16,12 +19,82 @@ interface EditorPaneProps {
 
 // React.memo でラップ
 export const EditorPane = React.memo(({ markdown, onChange, currentDocument }: EditorPaneProps) => {
-  const { isDbInitialized } = useDb(); // DB初期化状態を取得
+  const { isDbInitialized } = useDb();
+  const { handleError } = useErrorHandler(); // エラーハンドラフックを使用
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const editorScrollTopRef = useRef<number>(0); // スクロール位置を保持するref
+  const editorScrollTopRef = useRef<number>(0);
+  // const { isSaving } = useAutoSave({ document: currentDocument, content: markdown }); // useAutoSave を削除
 
-  // 自動保存フックを使用
-  const { isSaving } = useAutoSave({ document: currentDocument, content: markdown });
+  // --- ▼ useDebounce と isSaving ステートを追加 ▼ ---
+  const debouncedMarkdown = useDebounce(markdown, 1000); // 1秒後にデバウンスされた値を取得
+  const [isSaving, setIsSaving] = useState(false);
+  const [lastSavedContent, setLastSavedContent] = useState<string | null>(null);
+  const isMountedRef = useRef(false); // マウント状態を追跡するRef
+  // --- ▲ useDebounce と isSaving ステートを追加 ▲ ---
+
+  // 初期コンテンツを保存済みとして設定
+  useEffect(() => {
+    if (currentDocument) {
+      setLastSavedContent(currentDocument.content);
+      // マウント後に isMountedRef を true に設定
+      isMountedRef.current = true;
+    }
+    // アンマウント時に false に戻す
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, [currentDocument]);
+
+
+  // --- ▼ デバウンスされた値が変更されたら自動保存を実行する useEffect ▼ ---
+  useEffect(() => {
+    // マウント直後やDB未初期化、ドキュメントがない場合は保存しない
+    if (!isMountedRef.current || !isDbInitialized || !currentDocument) {
+      return;
+    }
+
+    // デバウンスされた内容が最後に保存した内容と同じ場合は保存しない
+    // または、デバウンスされた内容が現在のドキュメントの初期内容と同じ場合も保存しない（ドキュメント切り替え直後など）
+    if (debouncedMarkdown === lastSavedContent || debouncedMarkdown === currentDocument.content) {
+        // console.log("Skipping save: content unchanged or initial content.");
+        return;
+    }
+
+    // 保存処理
+    const saveDocument = async () => {
+      // 保存中に再度呼ばれた場合は無視
+      if (isSaving) {
+        console.log("Already saving, skipping.");
+        return;
+      }
+
+      console.log("Debounced change detected, attempting to save document:", currentDocument.id);
+      setIsSaving(true);
+      try {
+        const docToSave: DocumentType = {
+          ...currentDocument,
+          content: debouncedMarkdown, // デバウンスされた最新の内容
+          updatedAt: new Date(),
+        };
+        await updateDocument(docToSave);
+        setLastSavedContent(debouncedMarkdown); // 保存成功したら最後に保存した内容を更新
+        console.log("Document saved successfully via useDebounce effect.");
+      } catch (error) {
+        handleError({ error, context: "ドキュメント自動保存 (useDebounce)" });
+        // 保存失敗時は isSaving を解除するが、lastSavedContent は更新しない
+      } finally {
+        // マウントされている場合のみステートを更新
+        if (isMountedRef.current) {
+            setIsSaving(false);
+        }
+      }
+    };
+
+    saveDocument();
+
+  }, [debouncedMarkdown, currentDocument, isDbInitialized, handleError, lastSavedContent, isSaving]); // 依存配列に注意
+  // --- ▲ デバウンスされた値が変更されたら自動保存を実行する useEffect ▲ ---
+
 
   // カーソル位置にテキストを挿入する関数 (変更なし)
   const insertTextAtCursor = useCallback(
@@ -57,57 +130,25 @@ export const EditorPane = React.memo(({ markdown, onChange, currentDocument }: E
     [insertTextAtCursor]
   );
 
-  // ツールバーのアクションハンドラ (変更なし)
-  const handleToolbarAction = useCallback(
-    (action: EditorToolbarAction) => {
-      switch (action) {
-        case "h1":
-          insertTextAtCursor("# ");
-          break;
-        case "h2":
-          insertTextAtCursor("## ");
-          break;
-        case "bold":
-          insertTextAtCursor("**", "**");
-          break;
-        case "italic":
-          insertTextAtCursor("*", "*");
-          break;
-        case "link":
-          insertTextAtCursor("[", "](https://)");
-          break;
-        case "code":
-          insertTextAtCursor("```\n", "\n```");
-          break;
-        case "list":
-          insertTextAtCursor("- ");
-          break;
-        case "quote":
-          insertTextAtCursor("> ");
-          break;
-        case "hr":
-          insertTextAtCursor("\n---\n");
-          break;
-        case "marp-directive":
-          insertTextAtCursor("---\nmarp: true\ntheme: default\npaginate: true\n---\n\n");
-          break;
-        case "image-url":
-          const url = prompt("画像URLを入力してください:");
-          // 簡単なURL形式チェックを追加（より厳密なチェックも可能）
-          if (url && (url.startsWith("http://") || url.startsWith("https://"))) {
-            insertTextAtCursor(`![画像](${url})`);
-          } else if (url) {
-            alert("有効なURLを入力してください (http:// または https:// で始まる必要があります)。");
-          }
-          break;
-        default:
-          // 未知のアクションに対する処理（必要であれば）
-          console.warn("Unknown toolbar action:", action);
-          break;
-      }
-    },
-    [insertTextAtCursor]
-  );
+  // 個別のツールバーアクションハンドラ (変更なし)
+  const handleH1Click = useCallback(() => insertTextAtCursor("# "), [insertTextAtCursor]);
+  const handleH2Click = useCallback(() => insertTextAtCursor("## "), [insertTextAtCursor]);
+  const handleBoldClick = useCallback(() => insertTextAtCursor("**", "**"), [insertTextAtCursor]);
+  const handleItalicClick = useCallback(() => insertTextAtCursor("*", "*"), [insertTextAtCursor]);
+  const handleLinkClick = useCallback(() => insertTextAtCursor("[", "](https://)"), [insertTextAtCursor]);
+  const handleCodeClick = useCallback(() => insertTextAtCursor("```\n", "\n```"), [insertTextAtCursor]);
+  const handleListClick = useCallback(() => insertTextAtCursor("- "), [insertTextAtCursor]);
+  const handleQuoteClick = useCallback(() => insertTextAtCursor("> "), [insertTextAtCursor]);
+  const handleHrClick = useCallback(() => insertTextAtCursor("\n---\n"), [insertTextAtCursor]);
+  const handleMarpDirectiveClick = useCallback(() => insertTextAtCursor("---\nmarp: true\ntheme: default\npaginate: true\n---\n\n"), [insertTextAtCursor]);
+  const handleImageUrlClick = useCallback(() => {
+    const url = prompt("画像URLを入力してください:");
+    if (url && (url.startsWith("http://") || url.startsWith("https://"))) {
+      insertTextAtCursor(`![画像](${url})`);
+    } else if (url) {
+      alert("有効なURLを入力してください (http:// または https:// で始まる必要があります)。");
+    }
+  }, [insertTextAtCursor]);
 
   // スクロール位置の保持 (変更なし)
   const handleScroll = useCallback(() => {
@@ -140,14 +181,24 @@ export const EditorPane = React.memo(({ markdown, onChange, currentDocument }: E
           {currentDocument.title}
         </h3>
         <div className="flex items-center space-x-1 text-xs text-muted-foreground">
-          {/* isSaving は useAutoSave フックから取得 */}
+          {/* isSaving ステートを使用 */}
           {isSaving ? "保存中..." : "保存済み"}
         </div>
       </div>
 
-      {/* ツールバーコンポーネントをレンダリング */}
+      {/* ツールバーコンポーネント (変更なし) */}
       <EditorToolbar
-        onAction={handleToolbarAction}
+        onH1Click={handleH1Click}
+        onH2Click={handleH2Click}
+        onBoldClick={handleBoldClick}
+        onItalicClick={handleItalicClick}
+        onLinkClick={handleLinkClick}
+        onCodeClick={handleCodeClick}
+        onListClick={handleListClick}
+        onQuoteClick={handleQuoteClick}
+        onHrClick={handleHrClick}
+        onMarpDirectiveClick={handleMarpDirectiveClick}
+        onImageUrlClick={handleImageUrlClick}
         onInsertImageReference={handleInsertImageReference}
       />
 

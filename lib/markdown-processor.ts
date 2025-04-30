@@ -5,61 +5,77 @@ const IMAGE_REFERENCE_REGEX = /!\[(.*?)\]\(image:\/\/([a-fA-F0-9-]+)\)/g;
 
 /**
  * Markdown テキスト内のカスタム画像参照 (image://<id>) を
- * IndexedDB から取得した Base64 データURLに非同期で置換します。
+ * キャッシュまたは IndexedDB から取得した Base64 データURLに非同期で置換します。
  * @param markdown 元の Markdown テキスト
+ * @param imageCache 画像IDとDataURLのキャッシュ (Map)
+ * @param updateImageCache キャッシュを更新する関数 (id: string, dataUrl: string | null) => void
  * @returns Base64 に置換された Markdown テキスト (Promise)
  */
-export async function processMarkdownForRender(markdown: string): Promise<string> {
+export async function processMarkdownForRender(
+  markdown: string,
+  imageCache: Map<string, string | null>,
+  updateImageCache: (id: string, dataUrl: string | null) => void
+): Promise<string> {
   let processedMarkdown = markdown;
   const matches = [...markdown.matchAll(IMAGE_REFERENCE_REGEX)];
-  const imageFetchPromises: Promise<{ id: string; dataUrl: string | null }>[] = [];
+  const imageFetchPromises: Promise<void>[] = []; // Promise<void> に変更
 
-  // ユニークな画像IDを収集
+  // ユニークな画像IDを収集し、キャッシュにないものを特定
   const uniqueImageIds = new Set<string>();
+  const idsToFetch = new Set<string>();
   for (const match of matches) {
-    if (match[2]) {
-      uniqueImageIds.add(match[2]);
+    const imageId = match[2];
+    if (imageId) {
+      uniqueImageIds.add(imageId);
+      // キャッシュに存在しない場合のみ取得対象とする
+      if (!imageCache.has(imageId)) {
+        idsToFetch.add(imageId);
+      }
     }
   }
 
-  // ユニークなIDごとにDB取得のPromiseを作成
-  uniqueImageIds.forEach((imageId) => {
+  // キャッシュにないIDのみDB取得のPromiseを作成
+  idsToFetch.forEach((imageId) => {
     imageFetchPromises.push(
       getImage(imageId)
-        .then((imageData) => ({
-          id: imageId,
-          dataUrl: imageData?.dataUrl || null, // 見つからない場合は null
-        }))
+        .then((imageData) => {
+          const dataUrl = imageData?.dataUrl || null;
+          // 取得結果をキャッシュに反映
+          updateImageCache(imageId, dataUrl);
+        })
         .catch((error) => {
           console.error(`Error fetching image data for ID ${imageId}:`, error);
-          return { id: imageId, dataUrl: null }; // エラー時も null を返す
+          // エラー時もキャッシュにnullを記録して再取得を防ぐ
+          updateImageCache(imageId, null);
+          // Promise.all が失敗しないように、ここではエラーを投げない
         })
     );
   });
 
-  // すべての画像データを並行して取得
-  const imageDataResults = await Promise.all(imageFetchPromises);
+  // 必要な画像データを並行して取得
+  if (imageFetchPromises.length > 0) {
+    // console.log(`Fetching ${imageFetchPromises.length} images from DB...`);
+    await Promise.all(imageFetchPromises);
+    // console.log("Image fetching complete.");
+    // Promise.all が完了すると、updateImageCache によって imageCache が更新されているはず
+  }
 
-  // 取得結果をマップに変換して高速アクセス
-  const imageDataMap = new Map<string, string | null>();
-  imageDataResults.forEach((result) => {
-    imageDataMap.set(result.id, result.dataUrl);
-  });
-
-  // マッチした箇所を置換
+  // マッチした箇所をキャッシュの内容で置換
+  // replace メソッドは非同期処理を待たないため、Promise.all の後で実行する
   processedMarkdown = processedMarkdown.replace(
     IMAGE_REFERENCE_REGEX,
     (match, altText, imageId) => {
-      const dataUrl = imageDataMap.get(imageId);
+      // 最新のキャッシュからデータを取得
+      const dataUrl = imageCache.get(imageId);
       if (dataUrl) {
-        console.log(`Replaced image reference for ID: ${imageId}`);
+        // console.log(`Replaced image reference for ID: ${imageId} using cache.`);
         // Altテキストを保持して置換
         return `![${altText || ""}](${dataUrl})`;
       } else {
-        // 画像が見つからなかった場合の処理
-        console.warn(`Image data not found for ID: ${imageId}. Keeping reference.`);
-        // 参照を残すか、エラー表示にするか選択
-        // return `![⚠️ ${altText || ''} (画像が見つかりません: ${imageId})](${imageId})`; // エラー表示
+        // キャッシュにない、またはnullの場合（取得失敗含む）
+        console.warn(`Image data not found or failed to fetch for ID: ${imageId}. Keeping reference.`);
+        // 元の参照文字列を残すか、代替テキストを表示するか選択
+        // return `![⚠️ ${altText || ''} (画像読込エラー)](${imageId})`; // 代替テキスト例
         return match; // 元の参照文字列を残す
       }
     }

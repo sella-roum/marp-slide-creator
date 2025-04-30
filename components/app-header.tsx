@@ -61,7 +61,7 @@ export const AppHeader: React.FC<AppHeaderProps> = React.memo(
           {/* レイアウト選択ドロップダウン */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" aria-label="レイアウトを選択">
                 <LayoutIcon className="mr-1 h-4 w-4" />
                 Layout
               </Button>
@@ -99,7 +99,7 @@ export const AppHeader: React.FC<AppHeaderProps> = React.memo(
             size="sm"
             pressed={isChatVisible}
             onPressedChange={() => togglePanel("chat")}
-            aria-label="Toggle Chat Panel"
+            aria-label="チャットパネルの表示切り替え"
             disabled={visiblePanelsCount === 1 && isChatVisible}
           >
             <MessageSquareIcon className="h-4 w-4" />
@@ -108,7 +108,7 @@ export const AppHeader: React.FC<AppHeaderProps> = React.memo(
             size="sm"
             pressed={isEditorVisible}
             onPressedChange={() => togglePanel("editor")}
-            aria-label="Toggle Editor Panel"
+            aria-label="エディタパネルの表示切り替え"
             disabled={visiblePanelsCount === 1 && isEditorVisible}
           >
             <CodeIcon className="h-4 w-4" />
@@ -117,7 +117,7 @@ export const AppHeader: React.FC<AppHeaderProps> = React.memo(
             size="sm"
             pressed={isPreviewVisible}
             onPressedChange={() => togglePanel("preview")}
-            aria-label="Toggle Preview Panel"
+            aria-label="プレビューパネルの表示切り替え"
             disabled={visiblePanelsCount === 1 && isPreviewVisible}
           >
             <EyeIcon className="h-4 w-4" />
@@ -127,7 +127,7 @@ export const AppHeader: React.FC<AppHeaderProps> = React.memo(
 
           {/* エクスポートボタン */}
           <ExportDropdown
-            markdown={markdownContent}
+            markdown={markdownContent} // ExportDropdown 内のトリガーにも aria-label を検討
             documentTitle={currentDocument?.title || "Untitled"}
           />
         </div>

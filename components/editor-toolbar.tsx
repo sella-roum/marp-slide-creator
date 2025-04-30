@@ -14,31 +14,43 @@ import {
   Heading2Icon,
   QuoteIcon,
   SeparatorHorizontalIcon,
+  // 必要に応じて他のアイコンもインポート
 } from "lucide-react";
 
-// ツールバーで実行可能なアクションの型
-export type EditorToolbarAction =
-  | "h1"
-  | "h2"
-  | "bold"
-  | "italic"
-  | "link"
-  | "code"
-  | "list"
-  | "quote"
-  | "hr"
-  | "marp-directive"
-  | "image-url";
+// EditorToolbarAction 型は不要になる
 
 interface EditorToolbarProps {
-  onAction: (action: EditorToolbarAction) => void;
+  // onAction の代わりに個別のハンドラを追加
+  onH1Click: () => void;
+  onH2Click: () => void;
+  onBoldClick: () => void;
+  onItalicClick: () => void;
+  onLinkClick: () => void;
+  onCodeClick: () => void;
+  onListClick: () => void;
+  onQuoteClick: () => void;
+  onHrClick: () => void;
+  onMarpDirectiveClick: () => void;
+  onImageUrlClick: () => void;
   onInsertImageReference: (reference: string) => void;
 }
 
 export const EditorToolbar = React.memo(
-  ({ onAction, onInsertImageReference }: EditorToolbarProps) => {
-    // アクションを呼び出すヘルパー関数
-    const handleAction = (action: EditorToolbarAction) => () => onAction(action);
+  ({
+    onH1Click,
+    onH2Click,
+    onBoldClick,
+    onItalicClick,
+    onLinkClick,
+    onCodeClick,
+    onListClick,
+    onQuoteClick,
+    onHrClick,
+    onMarpDirectiveClick,
+    onImageUrlClick,
+    onInsertImageReference,
+  }: EditorToolbarProps) => {
+    // handleAction ヘルパー関数は不要になる
 
     return (
       <div className="flex items-center overflow-x-auto border-b p-1">
@@ -46,7 +58,7 @@ export const EditorToolbar = React.memo(
           {/* 見出し1 */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={handleAction("h1")} aria-label="見出し1">
+              <Button variant="ghost" size="icon" onClick={onH1Click} aria-label="見出し1">
                 <Heading1Icon className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
@@ -55,7 +67,7 @@ export const EditorToolbar = React.memo(
           {/* 見出し2 */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={handleAction("h2")} aria-label="見出し2">
+              <Button variant="ghost" size="icon" onClick={onH2Click} aria-label="見出し2">
                 <Heading2Icon className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
@@ -64,7 +76,7 @@ export const EditorToolbar = React.memo(
           {/* 太字 */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={handleAction("bold")} aria-label="太字">
+              <Button variant="ghost" size="icon" onClick={onBoldClick} aria-label="太字">
                 <BoldIcon className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
@@ -73,7 +85,7 @@ export const EditorToolbar = React.memo(
           {/* 斜体 */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={handleAction("italic")} aria-label="斜体">
+              <Button variant="ghost" size="icon" onClick={onItalicClick} aria-label="斜体">
                 <ItalicIcon className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
@@ -82,7 +94,7 @@ export const EditorToolbar = React.memo(
           {/* リンク */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={handleAction("link")} aria-label="リンク">
+              <Button variant="ghost" size="icon" onClick={onLinkClick} aria-label="リンク">
                 <LinkIcon className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
@@ -91,7 +103,7 @@ export const EditorToolbar = React.memo(
           {/* リスト */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={handleAction("list")} aria-label="リスト">
+              <Button variant="ghost" size="icon" onClick={onListClick} aria-label="リスト">
                 <ListIcon className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
@@ -100,7 +112,7 @@ export const EditorToolbar = React.memo(
           {/* 引用 */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={handleAction("quote")} aria-label="引用">
+              <Button variant="ghost" size="icon" onClick={onQuoteClick} aria-label="引用">
                 <QuoteIcon className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
@@ -109,7 +121,7 @@ export const EditorToolbar = React.memo(
           {/* コードブロック */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={handleAction("code")} aria-label="コードブロック">
+              <Button variant="ghost" size="icon" onClick={onCodeClick} aria-label="コードブロック">
                 <CodeIcon className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
@@ -118,7 +130,7 @@ export const EditorToolbar = React.memo(
           {/* スライド区切り */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={handleAction("hr")} aria-label="スライド区切り">
+              <Button variant="ghost" size="icon" onClick={onHrClick} aria-label="スライド区切り">
                 <SeparatorHorizontalIcon className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
@@ -127,7 +139,7 @@ export const EditorToolbar = React.memo(
           {/* 画像URL挿入 */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={handleAction("image-url")} aria-label="画像URLを挿入">
+              <Button variant="ghost" size="icon" onClick={onImageUrlClick} aria-label="画像URLを挿入">
                 {/* LinkIcon を流用するか、専用アイコンを用意 */}
                 <LinkIcon className="h-4 w-4" />
               </Button>
@@ -149,8 +161,8 @@ export const EditorToolbar = React.memo(
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={handleAction("marp-directive")}
-                aria-label="Marpディレクティブ挿入"
+                onClick={onMarpDirectiveClick}
+                aria-label="Marpディレクティブを挿入"
               >
                 Marp
               </Button>

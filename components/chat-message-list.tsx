@@ -92,6 +92,7 @@ export const ChatMessageList = React.memo(
                           size="sm"
                           className="h-7 px-2 text-xs"
                           onClick={() => onCopyCode(message.markdownCode, message.id)}
+                          aria-label={`メッセージ ${message.id} のコードをコピー`}
                         >
                           {copiedStates[message.id] ? (
                             <CheckIcon className="mr-1 h-3 w-3" />
@@ -106,6 +107,7 @@ export const ChatMessageList = React.memo(
                           className="h-7 px-2 text-xs"
                           onClick={() => onApplyCode(message.markdownCode)}
                           disabled={!message.markdownCode}
+                          aria-label={`メッセージ ${message.id} のコードをエディタに適用`}
                         >
                           <ClipboardPasteIcon className="mr-1 h-3 w-3" />
                           エディタに適用

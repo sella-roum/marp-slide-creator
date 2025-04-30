@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useLayoutEffect } from "react"; // useRef, useLayoutEffect をインポート
+import React, { useState, useEffect, useRef, useLayoutEffect, useCallback } from "react"; // useCallback をインポート
 import { FileIcon, Loader2Icon, AlertCircleIcon } from "lucide-react";
 import { processMarkdownForRender } from "@/lib/markdown-processor";
-import { useErrorHandler } from "@/hooks/use-error-handler"; // ★ インポート
+import { useErrorHandler } from "@/hooks/use-error-handler";
 
 interface PreviewPaneProps {
   markdown: string;
@@ -19,6 +19,23 @@ export const PreviewPane = React.memo(({ markdown }: PreviewPaneProps) => {
   const iframeRef = useRef<HTMLIFrameElement>(null); // iframeへの参照
   const { handleError } = useErrorHandler(); // ★ エラーハンドラフックを使用
   const previewScrollTopRef = useRef<number>(0); // プレビューのスクロール位置を保持
+  // --- ▼ 画像キャッシュ用のステートを追加 ▼ ---
+  const [imageCache, setImageCache] = useState<Map<string, string | null>>(new Map());
+  // --- ▲ 画像キャッシュ用のステートを追加 ▲ ---
+
+  // --- ▼ キャッシュ更新関数を追加 (useCallbackでメモ化) ▼ ---
+  const updateImageCache = useCallback((id: string, dataUrl: string | null) => {
+    setImageCache((prevCache) => {
+      // Mapが変更されたかチェックし、変更があれば新しいMapを返す
+      if (prevCache.get(id) === dataUrl) {
+        return prevCache; // 変更がなければ既存のMapを返す
+      }
+      const newCache = new Map(prevCache);
+      newCache.set(id, dataUrl);
+      return newCache;
+    });
+  }, []); // 依存配列は空
+  // --- ▲ キャッシュ更新関数を追加 ▲ ---
 
   // Initialize Marp (変更なし)
   useEffect(() => {
@@ -44,6 +61,7 @@ export const PreviewPane = React.memo(({ markdown }: PreviewPaneProps) => {
     if (!marpInstance) return;
 
     const render = async () => {
+      // Markdownが空の場合の処理
       if (!markdown) {
         setRenderedHTML("");
         setError(null);
@@ -54,27 +72,29 @@ export const PreviewPane = React.memo(({ markdown }: PreviewPaneProps) => {
       setIsProcessing(true);
       setError(null);
 
-      // --- ▼ スクロール位置の保存 ▼ ---
-      // renderedHTML を更新する前に現在のスクロール位置を取得
+      // スクロール位置の保存 (変更なし)
       const currentIframe = iframeRef.current;
       if (currentIframe && currentIframe.contentWindow) {
         previewScrollTopRef.current = currentIframe.contentWindow.scrollY;
-        // console.log("Saving preview scroll position:", previewScrollTopRef.current);
       }
-      // --- ▲ スクロール位置の保存 ▲ ---
 
       try {
         // console.log("Processing markdown for preview...");
-        const processedMarkdown = await processMarkdownForRender(markdown);
+        // --- ▼ processMarkdownForRender にキャッシュと更新関数を渡す ▼ ---
+        const processedMarkdown = await processMarkdownForRender(markdown, imageCache, updateImageCache);
+        // --- ▲ processMarkdownForRender にキャッシュと更新関数を渡す ▲ ---
         // console.log("Markdown processed.");
 
         let finalMarkdown = processedMarkdown;
+        // Marpディレクティブの追加 (変更なし)
         if (!finalMarkdown.includes("marp: true")) {
           finalMarkdown = `---\nmarp: true\n---\n\n${finalMarkdown}`;
         }
 
+        // Marpレンダリング (変更なし)
         const { html, css } = marpInstance.render(finalMarkdown);
 
+        // カスタムCSS (変更なし)
         const customCSS = `
                 section:not(:last-of-type) { border-bottom: 2px dashed #ccc; margin-bottom: 1rem; padding-bottom: 1rem; }
                 body { padding: 1rem; background-color: #f0f0f0; }
@@ -93,10 +113,12 @@ export const PreviewPane = React.memo(({ markdown }: PreviewPaneProps) => {
     };
 
     render();
-  }, [markdown, marpInstance, handleError]); // ★ handleError を依存配列に追加
+    // --- ▼ 依存配列に imageCache と updateImageCache を追加 ▼ ---
+    // updateImageCache は useCallback でメモ化されているため、通常は再生成されない
+  }, [markdown, marpInstance, handleError, imageCache, updateImageCache]);
+  // --- ▲ 依存配列に imageCache と updateImageCache を追加 ▲ ---
 
-  // --- ▼ スクロール位置の復元 ▼ ---
-  // renderedHTML が更新された後、iframe の load イベントでスクロール位置を復元
+  // スクロール位置の復元 (変更なし)
   useLayoutEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe) return;
@@ -114,8 +136,8 @@ export const PreviewPane = React.memo(({ markdown }: PreviewPaneProps) => {
     };
     // renderedHTML が変わるたびに load イベントリスナーを再設定
   }, [renderedHTML]);
-  // --- ▲ スクロール位置の復元 ▲ ---
 
+  // Render (変更なし)
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b p-2">

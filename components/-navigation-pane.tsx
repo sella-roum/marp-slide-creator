@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -116,7 +116,7 @@ export function NavigationPane({
     if (!isDbInitialized) return;
 
     try {
-      await deleteDocument(id);
+      await deleteDocument(id); // deleteDocumentAndRelatedData を使うべきか確認
       await onDocumentsChange();
 
       // If the deleted document was the current one, select another one
@@ -125,14 +125,8 @@ export function NavigationPane({
         if (remainingDocs.length > 0) {
           onDocumentChange(remainingDocs[0]);
         } else {
-          // No documents left
-          onDocumentChange({
-            id: "",
-            title: "",
-            content: "",
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          });
+          // No documents left - 適切な初期状態を設定
+          // onDocumentChange(null); // または空のドキュメントオブジェクト
         }
       }
 
@@ -197,8 +191,8 @@ export function NavigationPane({
             }}
           >
             <DialogTrigger asChild>
-              <Button variant="ghost" size="icon" title="新規作成">
-                <PlusIcon className="h-4 w-4" />
+              <Button variant="ghost" size="icon" title="新規作成" aria-label="新しいドキュメントを作成">
+                <PlusIcon className="h-4 w-4" aria-hidden="true" />
               </Button>
             </DialogTrigger>
             <DialogContent>
@@ -253,9 +247,9 @@ export function NavigationPane({
                 variant="ghost"
                 size="icon"
                 disabled={!currentDocument}
-                title="テンプレートとして保存"
+                aria-label="現在のドキュメントをテンプレートとして保存"
               >
-                <SaveIcon className="h-4 w-4" />
+                <SaveIcon className="h-4 w-4" aria-hidden="true" />
               </Button>
             </DialogTrigger>
             <DialogContent>
@@ -313,8 +307,13 @@ export function NavigationPane({
                 <div className="truncate">{doc.title}</div>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="ghost" size="icon" onClick={(e) => e.stopPropagation()}>
-                      <TrashIcon className="h-4 w-4" />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label={`ドキュメント「${doc.title}」を削除`}
+                    >
+                      <TrashIcon className="h-4 w-4" aria-hidden="true" />
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>

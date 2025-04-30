@@ -50,7 +50,7 @@ export const ImageCard = React.memo(
               variant="secondary"
               className="h-7 w-full bg-secondary/80 text-xs hover:bg-secondary"
               onClick={() => onCopy(image)}
-              aria-label={`画像「${image.name}」の参照をコピー`}
+              aria-label={`画像「${image.name}」の参照文字列をコピー`}
             >
               {isCopied ? (
                 <CheckIcon className="mr-1 h-3 w-3" />

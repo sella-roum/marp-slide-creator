@@ -24,14 +24,15 @@ export const ImageUploader = React.memo(
     return (
       <div className="flex-shrink-0 px-6 pt-4">
         <Button onClick={triggerFileInput} disabled={isUploading || !isDbInitialized}>
-          {isUploading ? (
+          {isUploading ? ( // ボタンテキストが状態によって変わるため、aria-labelで固定の目的を示す
             <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
           ) : (
             <UploadCloudIcon className="mr-2 h-4 w-4" />
           )}
-          新しい画像をアップロード
+          {isUploading ? "アップロード中..." : "新しい画像をアップロード"}
         </Button>
         <input
+          aria-label="画像ファイルを選択" // input自体は非表示だが念のため
           type="file"
           ref={fileInputRef} // props から受け取った ref を設定
           onChange={onFileSelect}

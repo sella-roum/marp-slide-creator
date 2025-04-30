@@ -58,6 +58,7 @@ export const ChatInputArea = React.memo(
           onClick={onSendMessage}
           size="icon"
           disabled={isDisabled || !inputValue.trim()}
+          aria-label="メッセージを送信"
         >
           <SendIcon className="h-4 w-4" />
         </Button>

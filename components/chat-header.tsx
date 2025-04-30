@@ -53,6 +53,7 @@ export const ChatHeader = React.memo(
                 isHistoryLoading ||
                 !isDbInitialized
               }
+              aria-label="チャット履歴をクリア"
             >
               <Trash2Icon className="mr-1 h-3 w-3" />
               履歴クリア
