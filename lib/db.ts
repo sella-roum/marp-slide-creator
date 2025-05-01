@@ -60,13 +60,15 @@ export function initializeDB(): Promise<void> {
 
       console.log(`Upgrading from version ${event.oldVersion} to ${event.newVersion}`);
 
-      // documents ストア作成
+      // documents ストア作成 (変更なし)
       if (!currentDb.objectStoreNames.contains(DOC_STORE)) {
         currentDb.createObjectStore(DOC_STORE, { keyPath: "id" });
         console.log(`Object store "${DOC_STORE}" created.`);
       }
+      // ★ ここで既存データのマイグレーションが必要な場合があるが、
+      // ★ 今回は app/page.tsx での初期値設定で対応するため省略
 
-      // chatMessages ストア作成
+      // chatMessages ストア作成 (変更なし)
       if (!currentDb.objectStoreNames.contains(CHAT_STORE)) {
         const chatStore = currentDb.createObjectStore(CHAT_STORE, { keyPath: "id" });
         if (!chatStore.indexNames.contains("docId_ts")) {
@@ -80,7 +82,7 @@ export function initializeDB(): Promise<void> {
         console.log(`Object store "${CHAT_STORE}" created.`);
       }
 
-      // images ストア作成
+      // images ストア作成 (変更なし)
       if (!currentDb.objectStoreNames.contains(IMAGE_STORE)) {
         const imageStore = currentDb.createObjectStore(IMAGE_STORE, { keyPath: "id" });
         if (!imageStore.indexNames.contains("createdAt")) {
@@ -111,7 +113,7 @@ export function initializeDB(): Promise<void> {
   return initializePromise;
 }
 
-// --- ヘルパー関数: トランザクション取得 (DB接続チェック強化) ---
+// --- ヘルパー関数: トランザクション取得 (変更なし) ---
 function getStore(storeName: string, mode: IDBTransactionMode): IDBObjectStore {
   // DB接続チェックを強化
   if (!db) {
@@ -155,12 +157,17 @@ export async function getDocument(id: string): Promise<DocumentType | null> {
     request.onsuccess = () => {
       const doc = request.result;
       if (doc) {
-        const { versions, ...rest } = doc; // 古いデータ形式への互換性
-        resolve({
-          ...rest,
+        // ★ 取得したデータに新しいフィールドがない場合にデフォルト値を設定
+        const documentData: DocumentType = {
+          id: doc.id,
+          title: doc.title,
+          content: doc.content,
           createdAt: new Date(doc.createdAt),
           updatedAt: new Date(doc.updatedAt),
-        } as DocumentType);
+          selectedTheme: doc.selectedTheme || 'default', // デフォルト値 'default'
+          customCss: doc.customCss || '', // デフォルト値 空文字列
+        };
+        resolve(documentData);
       } else {
         resolve(null);
       }
@@ -174,10 +181,12 @@ export async function getDocument(id: string): Promise<DocumentType | null> {
 }
 
 export async function updateDocument(doc: DocumentType): Promise<void> {
+  // ★ 新しいフィールドも含めて更新
   const docToUpdate = {
     ...doc,
     createdAt: new Date(doc.createdAt), // Dateオブジェクトに変換
     updatedAt: new Date(), // 更新日時を現在時刻に
+    // selectedTheme と customCss は doc に含まれている前提
   };
   const store = getStore(DOC_STORE, "readwrite");
   return new Promise((resolve, reject) => {
@@ -191,7 +200,7 @@ export async function updateDocument(doc: DocumentType): Promise<void> {
   });
 }
 
-// deleteDocumentAndRelatedData: トランザクション全体の reject を確認
+// deleteDocumentAndRelatedData: (変更なし)
 export async function deleteDocumentAndRelatedData(documentId: string): Promise<void> {
   // DB接続チェックは getStore を使う前に必要
   if (!db) {
@@ -272,7 +281,7 @@ export async function deleteDocumentAndRelatedData(documentId: string): Promise<
 }
 
 
-// --- チャットメッセージ関連関数 ---
+// --- チャットメッセージ関連関数 (変更なし) ---
 export async function addChatMessage(
   message: Omit<ChatMessageType, "id"> & { documentId: string }
 ): Promise<string> {
@@ -359,7 +368,7 @@ export async function clearChatMessages(documentId: string): Promise<void> {
   });
 }
 
-// --- 画像関連関数 ---
+// --- 画像関連関数 (変更なし) ---
 export async function addImage(imageData: Omit<ImageType, "id" | "createdAt">): Promise<string> {
     const id = uuidv4();
     const newImage: ImageType = { ...imageData, id, createdAt: new Date() };

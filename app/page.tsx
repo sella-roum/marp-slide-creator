@@ -13,22 +13,23 @@ import { MainLayout } from "@/components/main-layout";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { SINGLE_DOCUMENT_ID, type LayoutMode } from "@/lib/constants";
 import { useErrorHandler } from "@/hooks/use-error-handler";
-import { useDebounce } from "@/hooks/use-debounce"; // useDebounce フックをインポート
+import { useDebounce } from "@/hooks/use-debounce";
+import { updateMarkdownTheme } from "@/lib/utils";
+import { CustomCssDialog } from "@/components/custom-css-dialog";
 
 export default function Home() {
   const { isDbInitialized, dbError } = useDb();
   const { handleError } = useErrorHandler();
   const [currentDocument, setCurrentDocument] = useState<DocumentType | null>(null);
-  // --- ▼ ステートを分割 ▼ ---
-  const [editorContent, setEditorContent] = useState(""); // エディタの現在の内容
-  const debouncedEditorContent = useDebounce(editorContent, 500); // 500ms 遅延でプレビュー用コンテンツを生成
-  // --- ▲ ステートを分割 ▲ ---
+  const [editorContent, setEditorContent] = useState("");
+  const debouncedEditorContent = useDebounce(editorContent, 500);
   const [isChatVisible, setIsChatVisible] = useState(true);
   const [isEditorVisible, setIsEditorVisible] = useState(true);
   const [isPreviewVisible, setIsPreviewVisible] = useState(true);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("horizontal");
+  const [isCustomCssDialogOpen, setIsCustomCssDialogOpen] = useState(false);
 
-  // DB初期化エラーハンドリング (変更なし)
+  // DB初期化エラーハンドリング
   useEffect(() => {
     if (dbError) {
       handleError({ error: dbError, context: "データベース初期化" });
@@ -50,6 +51,8 @@ export default function Home() {
           content: "---\nmarp: true\ntheme: default\n---\n\n# Slide 1\n\n",
           createdAt: new Date(),
           updatedAt: new Date(),
+          selectedTheme: 'default',
+          customCss: '',
         };
         await updateDocument(newDocData);
         doc = await getDocument(SINGLE_DOCUMENT_ID);
@@ -60,12 +63,9 @@ export default function Home() {
 
       if (doc) {
         setCurrentDocument((prevDoc) => {
-          // ドキュメントが変更された場合のみステートを更新
           if (!prevDoc || prevDoc.id !== doc.id || prevDoc.updatedAt < doc.updatedAt) {
-            // --- ▼ editorContent を初期化 ▼ ---
             setEditorContent(doc.content);
-            // --- ▲ editorContent を初期化 ▲ ---
-            console.log("Document loaded/updated in state:", doc.title);
+            console.log("Document loaded/updated in state:", doc.title, "Theme:", doc.selectedTheme);
             return doc;
           }
           return prevDoc;
@@ -81,20 +81,83 @@ export default function Home() {
     }
   }, [isDbInitialized, handleError]);
 
-  // DB初期化後にドキュメント読み込み (変更なし)
+  // DB初期化後にドキュメント読み込み
   useEffect(() => {
     if (isDbInitialized) {
       loadOrCreateSingleDocument();
     }
   }, [isDbInitialized, loadOrCreateSingleDocument]);
 
-  // --- ▼ Markdown 変更ハンドラ (setEditorContent を呼び出す) ▼ ---
+  // Markdown 変更ハンドラ
   const handleEditorChange = useCallback((content: string) => {
     setEditorContent(content);
   }, []);
-  // --- ▲ Markdown 変更ハンドラ ▲ ---
 
-  // カラム表示状態トグル関数 (変更なし)
+  // --- ★ テーマ変更ハンドラを修正 ---
+  const handleThemeChange = useCallback(async (newTheme: string) => {
+    if (!currentDocument || newTheme === currentDocument.selectedTheme) return;
+
+    console.log("Theme changed to:", newTheme);
+
+    let updatedContent = editorContent;
+    // ★ 'custom' 以外のテーマが選択された場合のみ Markdown を更新
+    if (newTheme !== 'custom') {
+      updatedContent = updateMarkdownTheme(editorContent, newTheme);
+      setEditorContent(updatedContent); // エディタ表示を更新
+    }
+
+    const updatedDoc: DocumentType = {
+      ...currentDocument,
+      content: updatedContent, // 更新後のコンテンツ (custom選択時は変更なし)
+      selectedTheme: newTheme, // 選択されたテーマを設定
+      // customCss は変更しない
+      updatedAt: new Date(),
+    };
+    setCurrentDocument(updatedDoc); // ローカルステートを即時更新
+
+    try {
+      await updateDocument(updatedDoc); // DBに保存
+      console.log("Theme updated in DB.");
+    } catch (error) {
+      handleError({ error, context: "テーマの保存" });
+      // エラー発生時はステートを元に戻す
+      setCurrentDocument(currentDocument);
+      setEditorContent(currentDocument.content); // エディタの内容も元に戻す
+    }
+  }, [currentDocument, editorContent, handleError]);
+  // --- テーマ変更ハンドラ修正ここまで ---
+
+  // カスタムCSS編集ダイアログを開くハンドラ
+  const handleEditCustomCss = useCallback(() => {
+    if (!currentDocument) return;
+    setIsCustomCssDialogOpen(true);
+  }, [currentDocument]);
+
+  // カスタムCSS保存ハンドラ
+  const handleSaveCustomCss = useCallback(async (newCss: string) => {
+    if (!currentDocument) return;
+
+    console.log("Saving custom CSS...");
+    const updatedDoc: DocumentType = {
+      ...currentDocument,
+      selectedTheme: 'custom',
+      customCss: newCss,
+      updatedAt: new Date(),
+      // content は変更しない (theme: default のままにする)
+      // 必要であればここで updateMarkdownTheme(editorContent, 'default') を呼ぶ
+    };
+    setCurrentDocument(updatedDoc);
+
+    try {
+      await updateDocument(updatedDoc);
+      console.log("Custom CSS saved to DB.");
+    } catch (error) {
+      handleError({ error, context: "カスタムCSSの保存" });
+      setCurrentDocument(currentDocument);
+    }
+  }, [currentDocument, handleError]); // editorContent は不要
+
+  // カラム表示状態トグル関数
   const togglePanel = useCallback((panel: "chat" | "editor" | "preview") => {
     switch (panel) {
       case "chat": setIsChatVisible((prev) => !prev); break;
@@ -105,7 +168,7 @@ export default function Home() {
 
   const visiblePanelsCount = [isChatVisible, isEditorVisible, isPreviewVisible].filter(Boolean).length;
 
-  // 各パネルのレンダリング関数 (渡すプロパティを修正)
+  // 各パネルのレンダリング関数
   const renderChatPanel = useCallback(
     () =>
       isChatVisible && (
@@ -118,16 +181,16 @@ export default function Home() {
         >
           <div className={`flex h-full flex-col ${layoutMode === "chat-right" ? "border-l" : "border-r"}`}>
             <div className="h-full flex-1 overflow-hidden">
-              {/* --- ▼ ChatPane に渡す markdownContent を editorContent に変更 ▼ --- */}
-              <ChatPane currentDocument={currentDocument} onApplyToEditor={handleEditorChange} />
-              {/* --- ▲ ChatPane に渡す markdownContent を editorContent に変更 ▲ --- */}
+              <ChatPane
+                currentDocument={currentDocument}
+                onApplyToEditor={handleEditorChange}
+                onApplyCustomCss={handleSaveCustomCss}
+              />
             </div>
           </div>
         </ResizablePanel>
       ),
-    // --- ▼ 依存配列を更新 ▼ ---
-    [isChatVisible, layoutMode, currentDocument, handleEditorChange]
-    // --- ▲ 依存配列を更新 ▲ ---
+    [isChatVisible, layoutMode, currentDocument, handleEditorChange, handleSaveCustomCss]
   );
 
   const renderEditorPanel = useCallback(
@@ -141,19 +204,18 @@ export default function Home() {
           className="min-h-[100px] min-w-[200px]"
         >
           <div className="flex h-full flex-col">
-            {/* --- ▼ EditorPane に editorContent と handleEditorChange を渡す ▼ --- */}
             <EditorPane
               markdown={editorContent}
               onChange={handleEditorChange}
-              currentDocument={currentDocument}
+              currentDocument={currentDocument} // ★ EditorToolbar に渡すために必要
+              selectedTheme={currentDocument?.selectedTheme || 'default'}
+              onThemeChange={handleThemeChange}
+              onEditCustomCss={handleEditCustomCss}
             />
-            {/* --- ▲ EditorPane に editorContent と handleEditorChange を渡す ▲ --- */}
           </div>
         </ResizablePanel>
       ),
-    // --- ▼ 依存配列を更新 ▼ ---
-    [isEditorVisible, layoutMode, editorContent, handleEditorChange, currentDocument]
-    // --- ▲ 依存配列を更新 ▲ ---
+    [isEditorVisible, layoutMode, editorContent, handleEditorChange, currentDocument, handleThemeChange, handleEditCustomCss]
   );
 
   const renderPreviewPanel = useCallback(
@@ -167,18 +229,18 @@ export default function Home() {
           className="min-h-[100px] min-w-[200px]"
         >
           <div className="flex h-full flex-col">
-            {/* --- ▼ PreviewPane に debouncedEditorContent を渡す ▼ --- */}
-            <PreviewPane markdown={debouncedEditorContent} />
-            {/* --- ▲ PreviewPane に debouncedEditorContent を渡す ▲ --- */}
+            <PreviewPane
+              markdown={debouncedEditorContent}
+              selectedTheme={currentDocument?.selectedTheme || 'default'}
+              customCss={currentDocument?.customCss || ''}
+            />
           </div>
         </ResizablePanel>
       ),
-    // --- ▼ 依存配列を更新 ▼ ---
-    [isPreviewVisible, layoutMode, debouncedEditorContent]
-    // --- ▲ 依存配列を更新 ▲ ---
+    [isPreviewVisible, layoutMode, debouncedEditorContent, currentDocument?.selectedTheme, currentDocument?.customCss]
   );
 
-  // エディタ/プレビューのグループをレンダリングする関数 (変更なし)
+  // エディタ/プレビューのグループをレンダリングする関数
   const renderEditorPreviewGroup = useCallback(
     (direction: "vertical" | "horizontal", defaultSize: number, order: number) =>
       (isEditorVisible || isPreviewVisible) && (
@@ -198,7 +260,7 @@ export default function Home() {
     [isEditorVisible, isPreviewVisible, layoutMode, renderEditorPanel, renderPreviewPanel]
   );
 
-  // DB未初期化時の表示 (変更なし)
+  // DB未初期化時の表示
   if (!isDbInitialized || dbError) {
     return (
       <main className="flex h-screen flex-col items-center justify-center">
@@ -213,10 +275,9 @@ export default function Home() {
 
   return (
     <main className="flex h-screen flex-col overflow-hidden">
-      {/* --- ▼ AppHeader に editorContent を渡す ▼ --- */}
       <AppHeader
         currentDocument={currentDocument}
-        markdownContent={editorContent} // エクスポート用に最新の内容を渡す
+        markdownContent={editorContent}
         layoutMode={layoutMode}
         setLayoutMode={setLayoutMode}
         isChatVisible={isChatVisible}
@@ -225,9 +286,7 @@ export default function Home() {
         togglePanel={togglePanel}
         visiblePanelsCount={visiblePanelsCount}
       />
-      {/* --- ▲ AppHeader に editorContent を渡す ▲ --- */}
 
-      {/* MainLayout (変更なし) */}
       <MainLayout
         layoutMode={layoutMode}
         isChatVisible={isChatVisible}
@@ -237,6 +296,14 @@ export default function Home() {
         renderEditorPanel={renderEditorPanel}
         renderPreviewPanel={renderPreviewPanel}
         renderEditorPreviewGroup={renderEditorPreviewGroup}
+      />
+
+      {/* カスタムCSSダイアログ */}
+      <CustomCssDialog
+        isOpen={isCustomCssDialogOpen}
+        onOpenChange={setIsCustomCssDialogOpen}
+        initialCss={currentDocument?.customCss || ''}
+        onSave={handleSaveCustomCss}
       />
 
       <Toaster />

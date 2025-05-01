@@ -5,6 +5,8 @@ export interface DocumentType {
   content: string;
   createdAt: Date;
   updatedAt: Date;
+  selectedTheme: string; // ★ 追加: 選択中のテーマ名 ('default', 'gaia', 'uncover', 'custom')
+  customCss?: string; // ★ 追加: カスタムCSS文字列 (オプショナル)
   // versions プロパティ削除
 }
 

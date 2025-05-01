@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react"; // useState, useCallback は不要に
+import React from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -8,21 +8,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-// Dialog 関連のインポートは不要に
-// Checkbox, Label も不要に
-// downloadFile, processMarkdownForRender も不要に
-import { DownloadIcon } from "lucide-react"; // Loader2Icon は ExportDialog 内
-// Marp のインポートも不要に
-import { useExporter } from "@/hooks/use-exporter"; // 作成したフックをインポート
-import { ExportDialog } from "./export-dialog"; // 作成したダイアログをインポート
+import { DownloadIcon } from "lucide-react";
+import { useExporter } from "@/hooks/use-exporter";
+import { ExportDialog } from "./export-dialog";
+import type { DocumentType } from "@/lib/types"; // ★ DocumentType をインポート
 
 interface ExportDropdownProps {
-  markdown: string;
-  documentTitle: string;
+  currentDocument: DocumentType | null; // ★ 変更
 }
 
-export const ExportDropdown = React.memo(({ markdown, documentTitle }: ExportDropdownProps) => {
-  // useExporter フックから状態と関数を取得
+export const ExportDropdown = React.memo(({ currentDocument }: ExportDropdownProps) => { // ★ Props を変更
+  // ★ useExporter に currentDocument を渡す
   const {
     isExporting,
     exportFormat,
@@ -32,29 +28,28 @@ export const ExportDropdown = React.memo(({ markdown, documentTitle }: ExportDro
     handleOpenChange,
     handleIncludeSpeakerNotesChange,
     handleExport,
-  } = useExporter({ markdown, documentTitle });
+  } = useExporter({ currentDocument });
 
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm">
+          {/* ★ disabled 属性を追加 */}
+          <Button variant="outline" size="sm" disabled={!currentDocument}>
             <DownloadIcon className="mr-1 h-4 w-4" />
             Export
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {/* DropdownMenuItem をクリックしたらダイアログを開く */}
-          <DropdownMenuItem onSelect={() => openExportDialog("html")}>
+          <DropdownMenuItem onSelect={() => openExportDialog("html")} disabled={!currentDocument}>
             HTMLとしてエクスポート
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => openExportDialog("markdown")}>
+          <DropdownMenuItem onSelect={() => openExportDialog("markdown")} disabled={!currentDocument}>
             Markdownとしてエクスポート
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* ExportDialog をレンダリングし、状態とハンドラを渡す */}
       <ExportDialog
         isOpen={isDialogOpen}
         onOpenChange={handleOpenChange}
@@ -63,7 +58,8 @@ export const ExportDropdown = React.memo(({ markdown, documentTitle }: ExportDro
         onIncludeSpeakerNotesChange={handleIncludeSpeakerNotesChange}
         isExporting={isExporting}
         onExport={handleExport}
-        documentTitle={documentTitle}
+        // ★ documentTitle を currentDocument から取得
+        documentTitle={currentDocument?.title || "Untitled"}
       />
     </>
   );

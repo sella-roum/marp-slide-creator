@@ -12,7 +12,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ExportDropdown } from "@/components/export-dropdown";
-// PanelBottomIcon をインポート
 import {
   MessageSquareIcon,
   CodeIcon,
@@ -28,7 +27,7 @@ import type { LayoutMode } from "@/lib/constants";
 
 interface AppHeaderProps {
   currentDocument: DocumentType | null;
-  markdownContent: string;
+  markdownContent: string; // ★ 他の用途がなければ削除可能
   layoutMode: LayoutMode;
   setLayoutMode: (mode: LayoutMode) => void;
   isChatVisible: boolean;
@@ -41,7 +40,7 @@ interface AppHeaderProps {
 export const AppHeader: React.FC<AppHeaderProps> = React.memo(
   ({
     currentDocument,
-    markdownContent,
+    markdownContent, // ★ 不要になった可能性
     layoutMode,
     setLayoutMode,
     isChatVisible,
@@ -125,11 +124,11 @@ export const AppHeader: React.FC<AppHeaderProps> = React.memo(
 
           <Separator orientation="vertical" className="mx-1 h-6" />
 
-          {/* エクスポートボタン */}
+          {/* --- ▼ エクスポートボタンに currentDocument を渡す ▼ --- */}
           <ExportDropdown
-            markdown={markdownContent} // ExportDropdown 内のトリガーにも aria-label を検討
-            documentTitle={currentDocument?.title || "Untitled"}
+            currentDocument={currentDocument} // ★ 変更
           />
+          {/* --- ▲ エクスポートボタンに currentDocument を渡す ▲ --- */}
         </div>
       </header>
     );
