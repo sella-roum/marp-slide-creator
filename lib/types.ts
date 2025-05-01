@@ -1,20 +1,14 @@
-// VersionType と TemplateType を削除
+// lib/types.ts
+
 export interface DocumentType {
   id: string;
   title: string;
   content: string;
   createdAt: Date;
   updatedAt: Date;
-  selectedTheme: string; // ★ 追加: 選択中のテーマ名 ('default', 'gaia', 'uncover', 'custom')
-  customCss?: string; // ★ 追加: カスタムCSS文字列 (オプショナル)
-  // versions プロパティ削除
+  selectedTheme: string;
+  customCss?: string;
 }
-
-// VersionType 削除
-// export interface VersionType { ... }
-
-// TemplateType 削除
-// export interface TemplateType { ... }
 
 export interface ChatMessageType {
   id: string;
@@ -32,23 +26,27 @@ export interface ImageType {
   createdAt: Date;
 }
 
+// ★ AIへの依頼タスクタイプ
+export type GeminiTaskType = "GenerateSlideContent" | "GenerateTheme" | "GeneralConsultation";
+
 export interface GeminiRequestType {
   prompt: string;
   context: {
     currentMarkdown: string;
     selection?: string;
   };
-  taskType?: string;
+  taskType?: GeminiTaskType; // ★ 型を具体的にする
 }
 
 export interface GeminiResponseType {
   success: boolean;
   result?: {
     text: string;
-    markdownCode: string | null;
+    markdownCode: string | null; // Markdown または CSS コード
   };
   error?: {
     message: string;
     code: string;
+    details?: any; // エラー詳細を追加
   };
 }

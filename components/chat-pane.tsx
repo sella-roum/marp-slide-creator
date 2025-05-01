@@ -1,3 +1,4 @@
+// components/chat-pane.tsx
 "use client";
 
 import React from "react";
@@ -11,10 +12,10 @@ import { useDb } from "@/lib/db-context";
 interface ChatPaneProps {
   currentDocument: DocumentType | null;
   onApplyToEditor: (content: string) => void;
-  onApplyCustomCss: (css: string) => void; // ★ 追加
+  onApplyCustomCss: (css: string) => void;
 }
 
-export const ChatPane = React.memo(({ currentDocument, onApplyToEditor, onApplyCustomCss }: ChatPaneProps) => { // ★ onApplyCustomCss を受け取る
+export const ChatPane = React.memo(({ currentDocument, onApplyToEditor, onApplyCustomCss }: ChatPaneProps) => {
   const { isDbInitialized } = useDb();
   const {
     messages,
@@ -28,7 +29,9 @@ export const ChatPane = React.memo(({ currentDocument, onApplyToEditor, onApplyC
     handleCopyCode,
     handleApplyCode,
     setViewportRef,
-  } = useChat({ currentDocument, onApplyToEditor, onApplyCustomCss }); // ★ onApplyCustomCss を渡す
+    selectedTaskType, // ★ 追加
+    setSelectedTaskType, // ★ 追加
+  } = useChat({ currentDocument, onApplyToEditor, onApplyCustomCss });
 
   return (
     <div className="flex h-full flex-col bg-background">
@@ -49,6 +52,7 @@ export const ChatPane = React.memo(({ currentDocument, onApplyToEditor, onApplyC
         onApplyCode={handleApplyCode}
         setViewportRef={setViewportRef}
       />
+      {/* --- ▼ ChatInputArea に Props を渡す ▼ --- */}
       <ChatInputArea
         inputValue={inputValue}
         onInputChange={setInputValue}
@@ -57,7 +61,10 @@ export const ChatPane = React.memo(({ currentDocument, onApplyToEditor, onApplyC
         isHistoryLoading={isHistoryLoading}
         currentDocument={currentDocument}
         isDbInitialized={isDbInitialized}
+        selectedTaskType={selectedTaskType} // ★ 追加
+        onTaskTypeChange={setSelectedTaskType} // ★ 追加
       />
+      {/* --- ▲ ChatInputArea に Props を渡す ▲ --- */}
     </div>
   );
 });

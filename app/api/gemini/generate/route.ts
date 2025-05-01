@@ -1,3 +1,4 @@
+// app/api/gemini/generate/route.ts
 import { type NextRequest, NextResponse } from "next/server";
 import {
   GoogleGenAI,
@@ -5,8 +6,8 @@ import {
   Content,
   GenerateContentConfig,
 } from "@google/genai";
-import type { GeminiRequestType, GeminiResponseType } from "@/lib/types";
-import { extractMarkdownCode, extractCssCode } from "@/lib/utils"; // ★ extractCssCode をインポート
+import type { GeminiRequestType, GeminiResponseType, GeminiTaskType } from "@/lib/types"; // ★ GeminiTaskType をインポート
+import { extractMarkdownCode, extractCssCode } from "@/lib/utils";
 
 const API_KEY = process.env.GEMINI_API_KEY;
 
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<GeminiRes
     }
 
     const requestData: GeminiRequestType = await request.json();
-    const { prompt, context, taskType } = requestData;
+    const { prompt, context, taskType } = requestData; // taskType は GeminiTaskType | undefined
 
     if (!prompt) {
       console.error("Prompt is required.");
@@ -34,28 +35,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<GeminiRes
     const ai = new GoogleGenAI({ apiKey: API_KEY });
     const modelName = "gemini-1.5-flash";
 
-    // --- システムプロンプトの構築 ---
-    let systemInstructionText = `You are an AI assistant specialized in helping users create Marp presentations.
-Marp is a Markdown-based presentation tool.
+    // --- ★ システムプロンプトの構築 (taskTypeに応じて変更) ---
+    let systemInstructionText = "";
+    const currentMarkdownText = context?.currentMarkdown || "No content yet";
 
-When generating content:
-- Always provide Markdown code that is compatible with Marp.
-- Wrap all generated code blocks, including the main presentation content, in triple backticks (\`\`\`) with 'markdown' or 'marp' label.
-- Include appropriate Marp directives (like \`---\\nmarp: true\\ntheme: default\\n---\`) at the very beginning of the presentation Markdown.
-- Use \`---\` on a line by itself for slide separators.
-- Respond primarily in Japanese, unless the user explicitly requests another language.
+    // デフォルトのタスクタイプを決定
+    const effectiveTaskType: GeminiTaskType = taskType || "GeneralConsultation"; // デフォルトを相談にする
 
-Current user's Markdown content (for context, if applicable):
-\`\`\`
-${context?.currentMarkdown || "No content yet"}
-\`\`\`
-
-User's specific request: "${prompt}"
-`;
-
-    // --- タスクタイプに基づく指示の変更 ---
-    if (taskType === "GenerateTheme") {
-      systemInstructionText = `You are an expert CSS generator specializing in creating themes for Marp presentations.
+    switch (effectiveTaskType) {
+      case "GenerateTheme":
+        systemInstructionText = `You are an expert CSS generator specializing in creating themes for Marp presentations.
 Based on the user's request: "${prompt}"
 Generate a valid CSS code block suitable for a Marp theme.
 IMPORTANT: Respond ONLY with the CSS code itself, enclosed in a single Markdown code block labeled 'css'. Do NOT include any introductory text, explanations, or other content outside the code block.
@@ -70,12 +59,45 @@ section {
 }
 \`\`\`
 `;
-    } else if (taskType === "GenerateOutline") {
-      systemInstructionText += `\nBased on the user's request and current content, generate a well-structured outline for a Marp presentation using Markdown headers and slide separators. Provide only the Markdown outline.`;
-    } else if (taskType === "GenerateMermaid") {
-       systemInstructionText += `\nBased on the user's request, generate a Mermaid diagram. Provide only the Mermaid code wrapped in a markdown block with 'mermaid' label.`;
+        break;
+      case "GenerateSlideContent":
+        systemInstructionText = `You are an AI assistant specialized in helping users create Marp presentations.
+Marp is a Markdown-based presentation tool. Your primary goal is to generate Marp-compatible Markdown content based on the user's request.
+
+When generating slide content:
+- Always provide Markdown code that is compatible with Marp.
+- Wrap all generated code blocks, including the main presentation content, in triple backticks (\`\`\`) with 'markdown' or 'marp' label.
+- Include appropriate Marp directives (like \`---\\nmarp: true\\ntheme: default\\n---\`) ONLY if the user explicitly asks for a full new presentation structure or if the context is empty. Otherwise, focus on generating the requested slide content.
+- Use \`---\` on a line by itself for slide separators.
+- If asked for an outline, use Markdown headers and slide separators.
+- If asked for a Mermaid diagram, provide only the Mermaid code wrapped in a markdown block with 'mermaid' label.
+- Respond primarily in Japanese, unless the user explicitly requests another language.
+
+Current user's Markdown content (for context, if applicable):
+\`\`\`
+${currentMarkdownText}
+\`\`\`
+
+User's specific request for slide content: "${prompt}"
+Generate the requested Marp Markdown content.`;
+        break;
+      case "GeneralConsultation":
+      default: // 未知のタイプやデフォルトはこちら
+        systemInstructionText = `You are a helpful AI assistant. The user is working on a Marp presentation and has a general question or needs consultation.
+Respond clearly and concisely to the user's request: "${prompt}"
+Provide helpful information or advice related to Marp, presentations, or the user's query.
+If the user asks for code examples (like CSS snippets or Markdown syntax), provide them in appropriate code blocks.
+Respond primarily in Japanese, unless the user explicitly requests another language.
+
+Current user's Markdown content (for context, if applicable):
+\`\`\`
+${currentMarkdownText}
+\`\`\`
+`;
+        break;
     }
-    // --- タスクタイプ指示ここまで ---
+    // --- システムプロンプト構築ここまで ---
+
 
     const systemInstructionContent: Content = {
       role: "system",
@@ -127,12 +149,12 @@ section {
             );
       }
 
-      // --- ★ コード抽出ロジックの変更 ---
+      // --- コード抽出ロジック ---
       let extractedCode: string | null = null;
-      if (taskType === "GenerateTheme") {
-        extractedCode = extractCssCode(resultText); // ★ CSS抽出関数を使用
+      if (effectiveTaskType === "GenerateTheme") { // ★ effectiveTaskType を使用
+        extractedCode = extractCssCode(resultText);
       } else {
-        extractedCode = extractMarkdownCode(resultText); // それ以外はMarkdown抽出
+        extractedCode = extractMarkdownCode(resultText);
       }
       // --- コード抽出ここまで ---
 
@@ -140,7 +162,7 @@ section {
         success: true,
         result: {
           text: resultText,
-          markdownCode: extractedCode, // 抽出結果を返す
+          markdownCode: extractedCode,
         },
       });
 
