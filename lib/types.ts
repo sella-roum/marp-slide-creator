@@ -36,6 +36,7 @@ export interface GeminiRequestType {
     selection?: string;
   };
   taskType?: GeminiTaskType; // ★ 型を具体的にする
+  history?: ChatMessageType[]; // ★ 履歴データを追加
 }
 
 export interface GeminiResponseType {

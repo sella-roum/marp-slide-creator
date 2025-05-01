@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { useDb } from "@/lib/db-context";
 import { getDocument, updateDocument } from "@/lib/db";
@@ -277,7 +277,6 @@ export default function Home() {
     <main className="flex h-screen flex-col overflow-hidden">
       <AppHeader
         currentDocument={currentDocument}
-        markdownContent={editorContent}
         layoutMode={layoutMode}
         setLayoutMode={setLayoutMode}
         isChatVisible={isChatVisible}

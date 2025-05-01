@@ -7,12 +7,16 @@ import type {
   GeminiRequestType,
   GeminiResponseType,
   ChatMessageType,
-  GeminiTaskType, // ★ インポート
+  GeminiTaskType,
 } from "@/lib/types";
 import { addChatMessage, getChatMessages, clearChatMessages } from "@/lib/db";
 import { useDb } from "@/lib/db-context";
 import { v4 as uuidv4 } from "uuid";
 import { useErrorHandler } from "@/hooks/use-error-handler";
+
+// --- 履歴に含める最大メッセージ数 ---
+const MAX_HISTORY_LENGTH = 10;
+// --- ここまで ---
 
 interface UseChatProps {
   currentDocument: DocumentType | null;
@@ -29,16 +33,12 @@ export function useChat({ currentDocument, onApplyToEditor, onApplyCustomCss }: 
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [copiedStates, setCopiedStates] = useState<Record<string, boolean>>({});
   const viewportRef = useRef<HTMLDivElement | null>(null);
-  // --- ★ タスクタイプ管理ステートを追加 ---
-  const [selectedTaskType, setSelectedTaskType] = useState<GeminiTaskType>("GeneralConsultation"); // デフォルトは相談
-  // --- ここまで ---
+  const [selectedTaskType, setSelectedTaskType] = useState<GeminiTaskType>("GeneralConsultation");
 
-  // ScrollArea の Viewport を取得するための Ref を設定する関数
   const setViewportRef = useCallback((element: HTMLDivElement | null) => {
     viewportRef.current = element;
   }, []);
 
-  // メッセージ追加時に一番下にスクロール
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     setTimeout(() => {
       if (viewportRef.current) {
@@ -47,7 +47,6 @@ export function useChat({ currentDocument, onApplyToEditor, onApplyCustomCss }: 
     }, 100);
   }, []);
 
-  // ドキュメント変更時にチャット履歴を読み込む
   useEffect(() => {
     const loadHistory = async () => {
       if (!isDbInitialized) {
@@ -79,7 +78,6 @@ export function useChat({ currentDocument, onApplyToEditor, onApplyCustomCss }: 
     loadHistory();
   }, [currentDocument?.id, scrollToBottom, isDbInitialized, handleError]);
 
-  // 新しいメッセージをDBに保存する関数
   const saveMessage = useCallback(
     async (message: Omit<ChatMessageType, "id">) => {
       if (!isDbInitialized || !currentDocument?.id) return;
@@ -97,7 +95,7 @@ export function useChat({ currentDocument, onApplyToEditor, onApplyCustomCss }: 
     const prompt = inputValue.trim();
     if (!prompt || isLoading || !currentDocument?.id || !isDbInitialized) return;
 
-    const userMessageContent = prompt; // ユーザーメッセージは入力そのまま
+    const userMessageContent = prompt;
 
     const newUserMessage: Omit<ChatMessageType, "id"> = {
       role: "user",
@@ -107,43 +105,59 @@ export function useChat({ currentDocument, onApplyToEditor, onApplyCustomCss }: 
     };
 
     const tempUserMessageId = uuidv4();
-    setMessages((prev) => [...prev, { ...newUserMessage, id: tempUserMessageId }]);
+    // --- ★ 履歴を含めてメッセージリストを更新 ---
+    const currentMessages = [...messages, { ...newUserMessage, id: tempUserMessageId }];
+    setMessages(currentMessages);
+    // --- ここまで ---
     setInputValue("");
     setIsLoading(true);
     scrollToBottom();
 
     await saveMessage(newUserMessage);
 
-    // --- AIへのリクエスト ---
-    try {
-      const requestBody: GeminiRequestType = {
-        prompt: prompt,
-        context: { currentMarkdown: currentDocument.content || "" },
-        taskType: selectedTaskType, // ★ 選択されたタスクタイプを設定
-      };
+    // --- ★ 履歴データを抽出 ---
+    const historyForApi = currentMessages
+      .filter((msg) => msg.role === "user" || msg.role === "assistant") // ユーザーとアシスタントのメッセージのみ
+      .slice(-MAX_HISTORY_LENGTH); // 直近N件を取得
+    // --- ここまで ---
 
-      // ★ AIへの依頼中メッセージ
-      let thinkingMessage = "AIが応答を生成中です...";
-      if (selectedTaskType === "GenerateSlideContent") {
-        thinkingMessage = "AIがスライドコンテンツを生成中です...";
-      } else if (selectedTaskType === "GenerateTheme") {
-        thinkingMessage = "AIがテーマCSSを生成中です...";
-      }
-      const thinkingMsg: Omit<ChatMessageType, "id"> = {
-        role: "system",
-        content: thinkingMessage,
-        timestamp: new Date(),
-        documentId: currentDocument.id,
+    // --- ★ AIへの依頼中メッセージ ---
+    let thinkingMessage = "AIが応答を生成中です...";
+    if (selectedTaskType === "GenerateSlideContent") {
+      thinkingMessage = "AIがスライドコンテンツを生成中です...";
+    } else if (selectedTaskType === "GenerateTheme") {
+      thinkingMessage = "AIがテーマCSSを生成中です...";
+    }
+    const thinkingMsg: Omit<ChatMessageType, "id"> = {
+      role: "system",
+      content: thinkingMessage,
+      timestamp: new Date(),
+      documentId: currentDocument.id,
+    };
+    // --- ★ 思考中メッセージを追加 ---
+    setMessages((prev) => [...prev, { ...thinkingMsg, id: uuidv4() }]);
+    scrollToBottom();
+    // --- ここまで ---
+
+    try {
+      const requestBody: GeminiRequestType & { history?: ChatMessageType[] } = { // history を型に追加
+        prompt: prompt, // 最新のプロンプトは別途送信
+        context: { currentMarkdown: currentDocument.content || "" },
+        taskType: selectedTaskType,
+        // --- ★ 履歴データをリクエストに追加 ---
+        history: historyForApi,
+        // --- ここまで ---
       };
-      setMessages((prev) => [...prev, { ...thinkingMsg, id: uuidv4() }]);
-      scrollToBottom();
-      // --- ここまで ---
 
       const response = await fetch("/api/gemini/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
       });
+
+      // --- ★ 思考中メッセージを削除 ---
+      setMessages((prev) => prev.filter((msg) => msg.content !== thinkingMessage || msg.role !== "system"));
+      // --- ここまで ---
 
       const data: GeminiResponseType = await response.json();
 
@@ -196,16 +210,15 @@ export function useChat({ currentDocument, onApplyToEditor, onApplyCustomCss }: 
            setMessages((prev) => [...prev, { ...noCssMsg, id: uuidv4() }]);
            await saveMessage(noCssMsg);
         }
-        // --- スライド生成成功時の処理 (必要なら追加) ---
-        // else if (selectedTaskType === "GenerateSlideContent" && data.result.markdownCode) {
-        //   // onApplyToEditor(data.result.markdownCode); // 例: エディタに直接適用
-        // }
         // --- ここまで ---
 
       } else {
         throw new Error("AIからの応答が空でした。");
       }
     } catch (error) {
+      // --- ★ 思考中メッセージを削除 (エラー時も) ---
+      setMessages((prev) => prev.filter((msg) => msg.content !== thinkingMessage || msg.role !== "system"));
+      // --- ここまで ---
       const errorContent = `エラー: ${error instanceof Error ? error.message : "AIとの通信中にエラーが発生しました。"}`;
       handleError({ error, context: `AI ${selectedTaskType} 処理`, userMessage: errorContent });
       const errorMessage: Omit<ChatMessageType, "id"> = {
@@ -231,13 +244,14 @@ export function useChat({ currentDocument, onApplyToEditor, onApplyCustomCss }: 
     scrollToBottom,
     handleError,
     onApplyCustomCss,
-    onApplyToEditor,
-    selectedTaskType, // ★ 依存配列に追加
+    onApplyToEditor, // onApplyToEditor も依存配列に残す
+    selectedTaskType,
+    messages, // ★ messages を依存配列に追加
   ]);
 
   // チャット履歴クリア処理
   const handleClearChat = useCallback(async () => {
-    if (!isDbInitialized || !currentDocument?.id) return;
+     if (!isDbInitialized || !currentDocument?.id) return;
     try {
       await clearChatMessages(currentDocument.id);
       setMessages([]);
@@ -249,7 +263,7 @@ export function useChat({ currentDocument, onApplyToEditor, onApplyCustomCss }: 
   // コードをクリップボードにコピー
   const handleCopyCode = useCallback(
     (code: string | null | undefined, messageId: string) => {
-      if (!code) return;
+       if (!code) return;
       navigator.clipboard
         .writeText(code)
         .then(() => {
@@ -268,7 +282,7 @@ export function useChat({ currentDocument, onApplyToEditor, onApplyCustomCss }: 
   // コードをエディタに適用
   const handleApplyCode = useCallback(
     (codeToApply: string | null | undefined) => {
-      if (codeToApply) {
+       if (codeToApply) {
         onApplyToEditor(codeToApply);
       } else {
         console.warn("Attempted to apply code, but no markdown code was found in the message.");
@@ -289,7 +303,7 @@ export function useChat({ currentDocument, onApplyToEditor, onApplyCustomCss }: 
     handleCopyCode,
     handleApplyCode,
     setViewportRef,
-    selectedTaskType, // ★ 選択中のタスクタイプを返す
-    setSelectedTaskType, // ★ タスクタイプを変更する関数を返す
+    selectedTaskType,
+    setSelectedTaskType,
   };
 }

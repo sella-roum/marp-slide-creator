@@ -10,7 +10,10 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "AI-Assisted Marp Slide Creator",
-  description: "Create Marp slides with AI assistance from Google Gemini",
+  description: "Google Gemini AIの支援でMarpプレゼンテーション作成を加速。Markdownエディタ、リアルタイムプレビュー、AIによるアウトライン・コンテンツ・CSSテーマ生成、画像ライブラリ、HTML/MDエクスポート機能を提供。データはブラウザのIndexedDBに安全に保存されます。",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({
@@ -19,7 +22,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="ja" suppressHydrationWarning>
       <body className={inter.className}>
         <ThemeProvider
           attribute="class"
