@@ -46,7 +46,7 @@ export const ExportDialog = React.memo(
           </DialogHeader>
           <div className="space-y-4 py-4">
             {/* スピーカーノートのチェックボックス (現在は未対応のため disabled) */}
-            <div className="flex items-center space-x-2 opacity-50">
+            {/* <div className="flex items-center space-x-2 opacity-50">
               <Checkbox
                 id="speaker-notes"
                 checked={includeSpeakerNotes}
@@ -56,7 +56,7 @@ export const ExportDialog = React.memo(
               <Label htmlFor="speaker-notes" className="text-muted-foreground">
                 スピーカーノートを含める (未対応)
               </Label>
-            </div>
+            </div> */}
             <p className="text-sm text-muted-foreground">
               {exportFormat === "html"
                 ? "インタラクティブ機能付きのスタンドアロンHTMLファイルを生成します。"

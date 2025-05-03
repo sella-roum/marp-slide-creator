@@ -43,7 +43,7 @@ export const EditorPane = React.memo(({
   const { isDbInitialized } = useDb();
   const { handleError } = useErrorHandler();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const editorScrollTopRef = useRef<number>(0);
+  const editorScrollTopRef = useRef<number>(0); // 外部変更やスクロール操作時の位置保持用
 
   const debouncedMarkdown = useDebounce(markdown, 1000); // 自動保存用
   const [isSaving, setIsSaving] = useState(false);
@@ -98,11 +98,12 @@ export const EditorPane = React.memo(({
   }, [debouncedMarkdown, currentDocument, isDbInitialized, handleError, lastSavedContent, isSaving]);
 
 
-  // カーソル位置にテキストを挿入する関数 (変更なし)
+  // カーソル位置にテキストを挿入する関数 (★修正箇所)
   const insertTextAtCursor = useCallback(
     (textBefore: string, textAfter = "") => {
       if (!textareaRef.current) return;
       const textarea = textareaRef.current;
+      const currentScrollTop = textarea.scrollTop; // ★ アクション前のスクロール位置を保存
       const start = textarea.selectionStart;
       const end = textarea.selectionEnd;
       const selectedText = textarea.value.substring(start, end);
@@ -112,16 +113,22 @@ export const EditorPane = React.memo(({
         selectedText +
         textAfter +
         textarea.value.substring(end);
+
       onChange(newText); // page.tsx の handleEditorChange を呼ぶ
-      setTimeout(() => {
+
+      // DOM更新とレンダリング後にカーソル位置とスクロール位置を復元
+      // requestAnimationFrame を使用して、ブラウザの次の描画フレームで実行
+      requestAnimationFrame(() => {
         if (textareaRef.current) {
-          textareaRef.current.focus();
+          textareaRef.current.focus(); // フォーカスを戻す
           const newCursorPos = start + textBefore.length + (selectedText ? selectedText.length : 0);
-          textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+          textareaRef.current.setSelectionRange(newCursorPos, newCursorPos); // カーソル位置を設定
+          textareaRef.current.scrollTop = currentScrollTop; // ★ 保存したスクロール位置を復元
+          editorScrollTopRef.current = currentScrollTop; // ★ 内部状態も更新しておく
         }
-      }, 0);
+      });
     },
-    [onChange]
+    [onChange] // 依存配列は onChange のみ
   );
 
   // 画像参照を挿入する関数 (変更なし)
@@ -152,13 +159,14 @@ export const EditorPane = React.memo(({
     }
   }, [insertTextAtCursor]);
 
-  // スクロール位置の保持 (変更なし)
+  // スクロール位置の保持 (ユーザー操作や外部からの変更時) (変更なし)
   const handleScroll = useCallback(() => {
     if (textareaRef.current) {
       editorScrollTopRef.current = textareaRef.current.scrollTop;
     }
   }, []);
 
+  // 外部から markdown プロップが変更された場合にスクロール位置を復元 (変更なし)
   useLayoutEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.scrollTop = editorScrollTopRef.current;
@@ -187,7 +195,7 @@ export const EditorPane = React.memo(({
         </div>
       </div>
 
-      {/* ツールバーコンポーネントに Undo/Redo 関連の props を渡す */}
+      {/* ツールバーコンポーネントに Undo/Redo 関連の props を渡す (変更なし) */}
       <EditorToolbar
         onH1Click={handleH1Click}
         onH2Click={handleH2Click}
@@ -218,7 +226,7 @@ export const EditorPane = React.memo(({
         ref={textareaRef}
         value={markdown}
         onChange={(e) => onChange(e.target.value)} // page.tsx の handleEditorChange を呼ぶ
-        onScroll={handleScroll}
+        onScroll={handleScroll} // ユーザーのスクロール操作で位置を保存
         className="flex-1 resize-none rounded-none border-0 p-4 font-mono text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
         placeholder="Marpプレゼンテーションを作成するには、ここに入力を始めてください..."
         disabled={!isDbInitialized}
