@@ -17,6 +17,7 @@ interface ChatPaneProps {
 
 export const ChatPane = React.memo(({ currentDocument, onApplyToEditor, onApplyCustomCss }: ChatPaneProps) => {
   const { isDbInitialized } = useDb();
+  // --- ▼ useChat から受け取るハンドラを更新 ▼ ---
   const {
     messages,
     inputValue,
@@ -26,12 +27,15 @@ export const ChatPane = React.memo(({ currentDocument, onApplyToEditor, onApplyC
     copiedStates,
     handleSendMessage,
     handleClearChat,
-    handleCopyCode,
-    handleApplyCode,
+    handleCopyMarkdown, // 変更
+    handleCopyCss,      // 追加
+    handleApplyMarkdown,// 変更
+    handleApplyCss,     // 追加
     setViewportRef,
-    selectedTaskType, // ★ 追加
-    setSelectedTaskType, // ★ 追加
+    selectedTaskType,
+    setSelectedTaskType,
   } = useChat({ currentDocument, onApplyToEditor, onApplyCustomCss });
+  // --- ▲ useChat から受け取るハンドラを更新 ▲ ---
 
   return (
     <div className="flex h-full flex-col bg-background">
@@ -43,16 +47,19 @@ export const ChatPane = React.memo(({ currentDocument, onApplyToEditor, onApplyC
         isDbInitialized={isDbInitialized}
         onClearChat={handleClearChat}
       />
+      {/* --- ▼ ChatMessageList に渡す Props を更新 ▼ --- */}
       <ChatMessageList
         messages={messages}
         isLoading={isLoading}
         isHistoryLoading={isHistoryLoading}
         copiedStates={copiedStates}
-        onCopyCode={handleCopyCode}
-        onApplyCode={handleApplyCode}
+        onCopyMarkdown={handleCopyMarkdown} // 渡す
+        onCopyCss={handleCopyCss}          // 渡す
+        onApplyMarkdown={handleApplyMarkdown} // 渡す
+        onApplyCss={handleApplyCss}         // 渡す
         setViewportRef={setViewportRef}
       />
-      {/* --- ▼ ChatInputArea に Props を渡す ▼ --- */}
+      {/* --- ▲ ChatMessageList に渡す Props を更新 ▲ --- */}
       <ChatInputArea
         inputValue={inputValue}
         onInputChange={setInputValue}
@@ -61,10 +68,9 @@ export const ChatPane = React.memo(({ currentDocument, onApplyToEditor, onApplyC
         isHistoryLoading={isHistoryLoading}
         currentDocument={currentDocument}
         isDbInitialized={isDbInitialized}
-        selectedTaskType={selectedTaskType} // ★ 追加
-        onTaskTypeChange={setSelectedTaskType} // ★ 追加
+        selectedTaskType={selectedTaskType}
+        onTaskTypeChange={setSelectedTaskType}
       />
-      {/* --- ▲ ChatInputArea に Props を渡す ▲ --- */}
     </div>
   );
 });

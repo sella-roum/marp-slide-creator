@@ -3,17 +3,17 @@ import { type NextRequest, NextResponse } from "next/server";
 import {
   GoogleGenAI,
   GenerateContentResponse,
-  Content, // ★ Content 型をインポート
+  Content,
   GenerateContentConfig,
-  Part, // ★ Part 型をインポート
+  Part,
 } from "@google/genai";
-// ★ ChatMessageType もインポート (履歴データの型として)
+// ChatMessageType と GeminiResponseType のインポートを更新
 import type { GeminiRequestType, GeminiResponseType, GeminiTaskType, ChatMessageType } from "@/lib/types";
 import { extractMarkdownCode, extractCssCode } from "@/lib/utils";
 
 const API_KEY = process.env.GEMINI_API_KEY;
 
-// --- ★ 履歴データを Gemini API の Content[] 形式に変換するヘルパー関数 ---
+// --- 履歴データを Gemini API の Content[] 形式に変換するヘルパー関数 (変更なし) ---
 function formatHistoryForGemini(history: ChatMessageType[]): Content[] {
   const formattedHistory: Content[] = [];
   history.forEach(message => {
@@ -21,7 +21,7 @@ function formatHistoryForGemini(history: ChatMessageType[]): Content[] {
     if (message.role === "user") {
       formattedHistory.push({ role: "user", parts: [{ text: message.content }] });
     } else if (message.role === "assistant") {
-      // アシスタントの応答も履歴に含める
+      // アシスタントの応答も履歴に含める (content のみ)
       formattedHistory.push({ role: "model", parts: [{ text: message.content }] });
     }
   });
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<GeminiRes
       );
     }
 
-    // --- ★ history を受け取る ---
+    // --- history を受け取る (変更なし) ---
     const requestData: GeminiRequestType & { history?: ChatMessageType[] } = await request.json();
     const { prompt, context, taskType, history } = requestData;
     // --- ここまで ---
@@ -53,9 +53,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<GeminiRes
     }
 
     const ai = new GoogleGenAI({ apiKey: API_KEY });
-    const modelName = "gemini-1.5-flash";
+    const modelName = "gemini-2.5-flash-preview-04-17"; // "gemini-2.0-flash";
 
-    // --- システムプロンプトの構築 ---
+    // --- システムプロンプトの構築 (変更なし) ---
     let systemInstructionText = "";
     const currentMarkdownText = context?.currentMarkdown || "No content yet";
     const effectiveTaskType: GeminiTaskType = taskType || "GeneralConsultation";
@@ -121,7 +121,7 @@ ${currentMarkdownText}
       parts: [{ text: systemInstructionText }],
     };
 
-    // --- ★ 履歴データと最新のプロンプトを結合 ---
+    // --- 履歴データと最新のプロンプトを結合 (変更なし) ---
     const formattedHistory: Content[] = history ? formatHistoryForGemini(history) : [];
     const userContent: Content = {
       role: "user",
@@ -135,17 +135,15 @@ ${currentMarkdownText}
 
       const response: GenerateContentResponse = await ai.models.generateContent({
         model: modelName,
-        // --- ★ 結合した contents を渡す ---
-        contents: contentsForApi,
-        // --- ここまで ---
+        contents: contentsForApi, // 結合した contents を渡す
         config: {
           ...generationConfig,
           systemInstruction: systemInstructionContent,
         },
       });
 
-      // --- レスポンス処理 ---
-      const resultText = response.text;
+      // --- ▼ レスポンス処理 (修正) ▼ ---
+      const resultText = response.text; // Geminiからの応答テキスト全体
 
       if (!response.candidates || response.candidates.length === 0) {
          console.error("Model returned no candidates.");
@@ -173,21 +171,26 @@ ${currentMarkdownText}
             );
       }
 
-      let extractedCode: string | null = null;
-      if (effectiveTaskType === "GenerateTheme") {
-        extractedCode = extractCssCode(resultText);
-      } else {
-        extractedCode = extractMarkdownCode(resultText);
+      // コード抽出
+      let slideMarkdown: string | null = null;
+      let cssCode: string | null = null;
+
+      if (effectiveTaskType === "GenerateSlideContent") {
+        slideMarkdown = extractMarkdownCode(resultText);
+      } else if (effectiveTaskType === "GenerateTheme") {
+        cssCode = extractCssCode(resultText);
       }
 
+      // 新しいレスポンス形式で返す
       return NextResponse.json({
         success: true,
         result: {
-          text: resultText,
-          markdownCode: extractedCode,
+          text: resultText, // 応答テキスト全体
+          slideMarkdown: slideMarkdown, // スライドMarkdown (あれば)
+          cssCode: cssCode,         // CSSコード (あれば)
         },
       });
-      // --- レスポンス処理ここまで ---
+      // --- ▲ レスポンス処理 (修正) ▲ ---
 
     } catch (genaiError: any) {
        console.error("Gemini API call error:", genaiError);

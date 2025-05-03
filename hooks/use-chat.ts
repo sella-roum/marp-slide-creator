@@ -1,4 +1,3 @@
-// hooks/use-chat.ts
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
@@ -13,10 +12,10 @@ import { addChatMessage, getChatMessages, clearChatMessages } from "@/lib/db";
 import { useDb } from "@/lib/db-context";
 import { v4 as uuidv4 } from "uuid";
 import { useErrorHandler } from "@/hooks/use-error-handler";
+import { useToast } from "@/hooks/use-toast"; // useToast をインポート
 
-// --- 履歴に含める最大メッセージ数 ---
+// 履歴に含める最大メッセージ数
 const MAX_HISTORY_LENGTH = 10;
-// --- ここまで ---
 
 interface UseChatProps {
   currentDocument: DocumentType | null;
@@ -27,6 +26,7 @@ interface UseChatProps {
 export function useChat({ currentDocument, onApplyToEditor, onApplyCustomCss }: UseChatProps) {
   const { isDbInitialized } = useDb();
   const { handleError } = useErrorHandler();
+  const { toast } = useToast(); // toast を取得
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -105,23 +105,18 @@ export function useChat({ currentDocument, onApplyToEditor, onApplyCustomCss }: 
     };
 
     const tempUserMessageId = uuidv4();
-    // --- ★ 履歴を含めてメッセージリストを更新 ---
     const currentMessages = [...messages, { ...newUserMessage, id: tempUserMessageId }];
     setMessages(currentMessages);
-    // --- ここまで ---
     setInputValue("");
     setIsLoading(true);
     scrollToBottom();
 
     await saveMessage(newUserMessage);
 
-    // --- ★ 履歴データを抽出 ---
     const historyForApi = currentMessages
-      .filter((msg) => msg.role === "user" || msg.role === "assistant") // ユーザーとアシスタントのメッセージのみ
-      .slice(-MAX_HISTORY_LENGTH); // 直近N件を取得
-    // --- ここまで ---
+      .filter((msg) => msg.role === "user" || msg.role === "assistant")
+      .slice(-MAX_HISTORY_LENGTH);
 
-    // --- ★ AIへの依頼中メッセージ ---
     let thinkingMessage = "AIが応答を生成中です...";
     if (selectedTaskType === "GenerateSlideContent") {
       thinkingMessage = "AIがスライドコンテンツを生成中です...";
@@ -134,19 +129,15 @@ export function useChat({ currentDocument, onApplyToEditor, onApplyCustomCss }: 
       timestamp: new Date(),
       documentId: currentDocument.id,
     };
-    // --- ★ 思考中メッセージを追加 ---
     setMessages((prev) => [...prev, { ...thinkingMsg, id: uuidv4() }]);
     scrollToBottom();
-    // --- ここまで ---
 
     try {
-      const requestBody: GeminiRequestType & { history?: ChatMessageType[] } = { // history を型に追加
-        prompt: prompt, // 最新のプロンプトは別途送信
+      const requestBody: GeminiRequestType & { history?: ChatMessageType[] } = {
+        prompt: prompt,
         context: { currentMarkdown: currentDocument.content || "" },
         taskType: selectedTaskType,
-        // --- ★ 履歴データをリクエストに追加 ---
         history: historyForApi,
-        // --- ここまで ---
       };
 
       const response = await fetch("/api/gemini/generate", {
@@ -155,9 +146,7 @@ export function useChat({ currentDocument, onApplyToEditor, onApplyCustomCss }: 
         body: JSON.stringify(requestBody),
       });
 
-      // --- ★ 思考中メッセージを削除 ---
       setMessages((prev) => prev.filter((msg) => msg.content !== thinkingMessage || msg.role !== "system"));
-      // --- ここまで ---
 
       const data: GeminiResponseType = await response.json();
 
@@ -169,7 +158,8 @@ export function useChat({ currentDocument, onApplyToEditor, onApplyCustomCss }: 
         const newAssistantMessage: Omit<ChatMessageType, "id"> = {
           role: "assistant",
           content: data.result.text,
-          markdownCode: data.result.markdownCode,
+          slideMarkdown: data.result.slideMarkdown,
+          cssCode: data.result.cssCode,
           timestamp: new Date(),
           documentId: currentDocument.id,
         };
@@ -177,48 +167,46 @@ export function useChat({ currentDocument, onApplyToEditor, onApplyCustomCss }: 
         setMessages((prev) => [...prev, { ...newAssistantMessage, id: tempAssistantMessageId }]);
         await saveMessage(newAssistantMessage);
 
-        // --- テーマ生成成功時の処理 ---
-        if (selectedTaskType === "GenerateTheme" && data.result.markdownCode) {
-          try {
-            onApplyCustomCss(data.result.markdownCode);
-            const successMsg: Omit<ChatMessageType, "id"> = {
-              role: "system",
-              content: "✅ AIが生成したテーマCSSを適用しました。",
-              timestamp: new Date(),
-              documentId: currentDocument.id,
-            };
-            setMessages((prev) => [...prev, { ...successMsg, id: uuidv4() }]);
-            await saveMessage(successMsg); // システムメッセージも保存
-          } catch (applyError) {
-             handleError({ error: applyError, context: "生成されたCSSの適用" });
-             const applyErrorMsg: Omit<ChatMessageType, "id"> = {
-               role: "system",
-               content: `⚠️ 生成されたCSSの適用中にエラーが発生しました: ${applyError instanceof Error ? applyError.message : '不明なエラー'}`,
-               timestamp: new Date(),
-               documentId: currentDocument.id,
-             };
-             setMessages((prev) => [...prev, { ...applyErrorMsg, id: uuidv4() }]);
-             await saveMessage(applyErrorMsg);
-          }
-        } else if (selectedTaskType === "GenerateTheme" && !data.result.markdownCode) {
-           const noCssMsg: Omit<ChatMessageType, "id"> = {
-             role: "system",
-             content: "⚠️ AIは応答しましたが、有効なCSSコードが見つかりませんでした。",
-             timestamp: new Date(),
-             documentId: currentDocument.id,
-           };
-           setMessages((prev) => [...prev, { ...noCssMsg, id: uuidv4() }]);
-           await saveMessage(noCssMsg);
-        }
-        // --- ここまで ---
+        // --- ▼ CSS自動適用を削除 ▼ ---
+        // if (selectedTaskType === "GenerateTheme" && data.result.cssCode) {
+        //   try {
+        //     // onApplyCustomCss(data.result.cssCode); // ← この行を削除またはコメントアウト
+        //     const successMsg: Omit<ChatMessageType, "id"> = {
+        //       role: "system",
+        //       content: "✅ AIがテーマCSSを生成しました。「CSSに適用」ボタンで適用できます。", // メッセージを修正
+        //       timestamp: new Date(),
+        //       documentId: currentDocument.id,
+        //     };
+        //     setMessages((prev) => [...prev, { ...successMsg, id: uuidv4() }]);
+        //     await saveMessage(successMsg);
+        //   } catch (applyError) {
+        //      handleError({ error: applyError, context: "生成されたCSSの適用" });
+        //      const applyErrorMsg: Omit<ChatMessageType, "id"> = {
+        //        role: "system",
+        //        content: `⚠️ 生成されたCSSの適用中にエラーが発生しました: ${applyError instanceof Error ? applyError.message : '不明なエラー'}`,
+        //        timestamp: new Date(),
+        //        documentId: currentDocument.id,
+        //      };
+        //      setMessages((prev) => [...prev, { ...applyErrorMsg, id: uuidv4() }]);
+        //      await saveMessage(applyErrorMsg);
+        //   }
+        // } else if (selectedTaskType === "GenerateTheme" && !data.result.cssCode) {
+        //    const noCssMsg: Omit<ChatMessageType, "id"> = {
+        //      role: "system",
+        //      content: "⚠️ AIは応答しましたが、有効なCSSコードが見つかりませんでした。",
+        //      timestamp: new Date(),
+        //      documentId: currentDocument.id,
+        //    };
+        //    setMessages((prev) => [...prev, { ...noCssMsg, id: uuidv4() }]);
+        //    await saveMessage(noCssMsg);
+        // }
+        // --- ▲ CSS自動適用を削除 ▲ ---
 
       } else {
         throw new Error("AIからの応答が空でした。");
       }
     } catch (error) {
-      // --- ★ 思考中メッセージを削除 (エラー時も) ---
       setMessages((prev) => prev.filter((msg) => msg.content !== thinkingMessage || msg.role !== "system"));
-      // --- ここまで ---
       const errorContent = `エラー: ${error instanceof Error ? error.message : "AIとの通信中にエラーが発生しました。"}`;
       handleError({ error, context: `AI ${selectedTaskType} 処理`, userMessage: errorContent });
       const errorMessage: Omit<ChatMessageType, "id"> = {
@@ -243,13 +231,12 @@ export function useChat({ currentDocument, onApplyToEditor, onApplyCustomCss }: 
     saveMessage,
     scrollToBottom,
     handleError,
-    onApplyCustomCss,
-    onApplyToEditor, // onApplyToEditor も依存配列に残す
+    // onApplyCustomCss, // ← 依存配列から削除 (自動適用しないため)
     selectedTaskType,
-    messages, // ★ messages を依存配列に追加
+    messages,
   ]);
 
-  // チャット履歴クリア処理
+  // チャット履歴クリア処理 (変更なし)
   const handleClearChat = useCallback(async () => {
      if (!isDbInitialized || !currentDocument?.id) return;
     try {
@@ -260,37 +247,65 @@ export function useChat({ currentDocument, onApplyToEditor, onApplyCustomCss }: 
     }
   }, [currentDocument?.id, isDbInitialized, handleError]);
 
-  // コードをクリップボードにコピー
-  const handleCopyCode = useCallback(
+  // コードコピーハンドラ (変更なし)
+  const handleCopyMarkdown = useCallback(
     (code: string | null | undefined, messageId: string) => {
-       if (!code) return;
-      navigator.clipboard
-        .writeText(code)
-        .then(() => {
-          setCopiedStates((prev) => ({ ...prev, [messageId]: true }));
-          setTimeout(() => {
-            setCopiedStates((prev) => ({ ...prev, [messageId]: false }));
-          }, 2000);
-        })
-        .catch((err) => {
-          handleError({ error: err, context: "コードのコピー" });
-        });
+      if (!code) return;
+      navigator.clipboard.writeText(code).then(() => {
+        setCopiedStates((prev) => ({ ...prev, [`md-${messageId}`]: true }));
+        setTimeout(() => {
+          setCopiedStates((prev) => ({ ...prev, [`md-${messageId}`]: false }));
+        }, 2000);
+      }).catch((err) => handleError({ error: err, context: "Markdownコードのコピー" }));
     },
     [handleError]
   );
 
-  // コードをエディタに適用
-  const handleApplyCode = useCallback(
-    (codeToApply: string | null | undefined) => {
-       if (codeToApply) {
-        onApplyToEditor(codeToApply);
-      } else {
-        console.warn("Attempted to apply code, but no markdown code was found in the message.");
-      }
+  const handleCopyCss = useCallback(
+    (code: string | null | undefined, messageId: string) => {
+      if (!code) return;
+      navigator.clipboard.writeText(code).then(() => {
+        setCopiedStates((prev) => ({ ...prev, [`css-${messageId}`]: true }));
+        setTimeout(() => {
+          setCopiedStates((prev) => ({ ...prev, [`css-${messageId}`]: false }));
+        }, 2000);
+      }).catch((err) => handleError({ error: err, context: "CSSコードのコピー" }));
     },
-    [onApplyToEditor]
+    [handleError]
   );
 
+  // コード適用ハンドラ (変更なし)
+  const handleApplyMarkdown = useCallback(
+    (codeToApply: string | null | undefined) => {
+      if (codeToApply) {
+        onApplyToEditor(codeToApply);
+        toast({ title: "成功", description: "Markdownをエディタに適用しました。" }); // 適用時にトースト表示
+      } else {
+        console.warn("Attempted to apply Markdown, but no code was found.");
+        toast({ title: "エラー", description: "適用するMarkdownコードが見つかりません。", variant: "destructive" });
+      }
+    },
+    [onApplyToEditor, toast] // toast を依存配列に追加
+  );
+
+  const handleApplyCss = useCallback(
+    (codeToApply: string | null | undefined) => {
+      if (codeToApply) {
+        try {
+          onApplyCustomCss(codeToApply);
+          toast({ title: "成功", description: "カスタムCSSを適用しました。" }); // 適用時にトースト表示
+        } catch (error) {
+           handleError({ error, context: "カスタムCSSの適用" });
+        }
+      } else {
+        console.warn("Attempted to apply CSS, but no code was found.");
+        toast({ title: "エラー", description: "適用するCSSコードが見つかりません。", variant: "destructive" });
+      }
+    },
+    [onApplyCustomCss, toast, handleError] // toast, handleError を依存配列に追加
+  );
+
+  // フックの戻り値 (変更なし)
   return {
     messages,
     inputValue,
@@ -300,8 +315,10 @@ export function useChat({ currentDocument, onApplyToEditor, onApplyCustomCss }: 
     copiedStates,
     handleSendMessage,
     handleClearChat,
-    handleCopyCode,
-    handleApplyCode,
+    handleCopyMarkdown,
+    handleCopyCss,
+    handleApplyMarkdown,
+    handleApplyCss,
     setViewportRef,
     selectedTaskType,
     setSelectedTaskType,

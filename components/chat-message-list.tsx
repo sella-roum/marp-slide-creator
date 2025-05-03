@@ -11,19 +11,24 @@ import {
   CheckIcon,
   Loader2Icon,
   ClipboardPasteIcon,
+  PaletteIcon, // ★ PaletteIcon をインポート
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ChatMessageType } from "@/lib/types";
 
+// --- ▼ Props を修正 ▼ ---
 interface ChatMessageListProps {
   messages: ChatMessageType[];
   isLoading: boolean;
   isHistoryLoading: boolean;
-  copiedStates: Record<string, boolean>;
-  onCopyCode: (code: string | null | undefined, messageId: string) => void;
-  onApplyCode: (codeToApply: string | null | undefined) => void;
-  setViewportRef: (element: HTMLDivElement | null) => void; // Ref を受け取るための Prop
+  copiedStates: Record<string, boolean>; // キーが 'md-' or 'css-' プレフィックス付きになる
+  onCopyMarkdown: (code: string | null | undefined, messageId: string) => void;
+  onCopyCss: (code: string | null | undefined, messageId: string) => void;
+  onApplyMarkdown: (codeToApply: string | null | undefined) => void;
+  onApplyCss: (codeToApply: string | null | undefined) => void;
+  setViewportRef: (element: HTMLDivElement | null) => void;
 }
+// --- ▲ Props を修正 ▲ ---
 
 export const ChatMessageList = React.memo(
   ({
@@ -31,21 +36,21 @@ export const ChatMessageList = React.memo(
     isLoading,
     isHistoryLoading,
     copiedStates,
-    onCopyCode,
-    onApplyCode,
-    setViewportRef, // Prop を受け取る
+    onCopyMarkdown, // 受け取る
+    onCopyCss,      // 受け取る
+    onApplyMarkdown,// 受け取る
+    onApplyCss,     // 受け取る
+    setViewportRef,
   }: ChatMessageListProps) => {
     const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-    // ScrollArea の Viewport を取得して親コンポーネント (useChat フック) に渡す
     useEffect(() => {
       if (scrollAreaRef.current) {
         const viewportElement = scrollAreaRef.current.querySelector<HTMLDivElement>(
           "div[data-radix-scroll-area-viewport]"
         );
-        setViewportRef(viewportElement); // Ref を設定
+        setViewportRef(viewportElement);
       }
-      // setViewportRef は useCallback でメモ化されている想定
     }, [setViewportRef]);
 
     return (
@@ -64,7 +69,7 @@ export const ChatMessageList = React.memo(
           {!isHistoryLoading &&
             messages.map((message) => (
               <div
-                key={message.id} // DB永続化前の仮IDでも動作
+                key={message.id}
                 className={`flex items-end gap-2 ${
                   message.role === "user" ? "justify-end" : "justify-start"
                 }`}
@@ -85,35 +90,54 @@ export const ChatMessageList = React.memo(
                     } whitespace-pre-wrap break-words`}
                   >
                     {message.content}
-                    {message.role === "assistant" && message.markdownCode && (
+                    {/* --- ▼ ボタン表示ロジックを修正 ▼ --- */}
+                    {message.role === "assistant" && (message.slideMarkdown || message.cssCode) && (
                       <div className="mt-2 flex flex-wrap gap-2 border-t border-muted-foreground/20 pt-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-xs"
-                          onClick={() => onCopyCode(message.markdownCode, message.id)}
-                          aria-label={`メッセージ ${message.id} のコードをコピー`}
-                        >
-                          {copiedStates[message.id] ? (
-                            <CheckIcon className="mr-1 h-3 w-3" />
-                          ) : (
-                            <CopyIcon className="mr-1 h-3 w-3" />
-                          )}
-                          コードコピー
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-xs"
-                          onClick={() => onApplyCode(message.markdownCode)}
-                          disabled={!message.markdownCode}
-                          aria-label={`メッセージ ${message.id} のコードをエディタに適用`}
-                        >
-                          <ClipboardPasteIcon className="mr-1 h-3 w-3" />
-                          エディタに適用
-                        </Button>
+                        {/* Markdown用ボタン */}
+                        {message.slideMarkdown && (
+                          <>
+                            <Button
+                              variant="ghost" size="sm" className="h-7 px-2 text-xs"
+                              onClick={() => onCopyMarkdown(message.slideMarkdown, message.id)}
+                              aria-label={`メッセージ ${message.id} のMarkdownコードをコピー`}
+                            >
+                              {copiedStates[`md-${message.id}`] ? <CheckIcon className="mr-1 h-3 w-3" /> : <CopyIcon className="mr-1 h-3 w-3" />}
+                              Markdownコピー
+                            </Button>
+                            <Button
+                              variant="ghost" size="sm" className="h-7 px-2 text-xs"
+                              onClick={() => onApplyMarkdown(message.slideMarkdown)}
+                              aria-label={`メッセージ ${message.id} のMarkdownコードをエディタに適用`}
+                            >
+                              <ClipboardPasteIcon className="mr-1 h-3 w-3" />
+                              エディタに適用
+                            </Button>
+                          </>
+                        )}
+                        {/* CSS用ボタン */}
+                        {message.cssCode && (
+                          <>
+                            <Button
+                              variant="ghost" size="sm" className="h-7 px-2 text-xs"
+                              onClick={() => onCopyCss(message.cssCode, message.id)}
+                              aria-label={`メッセージ ${message.id} のCSSコードをコピー`}
+                            >
+                              {copiedStates[`css-${message.id}`] ? <CheckIcon className="mr-1 h-3 w-3" /> : <CopyIcon className="mr-1 h-3 w-3" />}
+                              CSSコピー
+                            </Button>
+                            <Button
+                              variant="ghost" size="sm" className="h-7 px-2 text-xs"
+                              onClick={() => onApplyCss(message.cssCode)}
+                              aria-label={`メッセージ ${message.id} のCSSコードをカスタムCSSに適用`}
+                            >
+                              <PaletteIcon className="mr-1 h-3 w-3" /> {/* アイコン例 */}
+                              CSSに適用
+                            </Button>
+                          </>
+                        )}
                       </div>
                     )}
+                    {/* --- ▲ ボタン表示ロジックを修正 ▲ --- */}
                   </div>
                 )}
                 {message.role === "system" && (
