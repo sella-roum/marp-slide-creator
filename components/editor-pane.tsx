@@ -13,11 +13,17 @@ import { EditorToolbar } from "./editor-toolbar";
 
 interface EditorPaneProps {
   markdown: string;
-  onChange: (content: string) => void; // この onChange が Textarea の変更とツールバー操作の両方で呼ばれる
+  onChange: (content: string) => void;
   currentDocument: DocumentType | null;
   selectedTheme: string;
   onThemeChange: (theme: string) => void;
   onEditCustomCss: () => void;
+  // --- ▼ Undo/Redo 関連の props を追加 ▼ ---
+  onUndo: () => void;
+  onRedo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
+  // --- ▲ Undo/Redo 関連の props を追加 ▲ ---
 }
 
 export const EditorPane = React.memo(({
@@ -27,18 +33,24 @@ export const EditorPane = React.memo(({
   selectedTheme,
   onThemeChange,
   onEditCustomCss,
+  // --- ▼ props を受け取る ▼ ---
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
+  // --- ▲ props を受け取る ▲ ---
 }: EditorPaneProps) => {
   const { isDbInitialized } = useDb();
   const { handleError } = useErrorHandler();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const editorScrollTopRef = useRef<number>(0);
 
-  const debouncedMarkdown = useDebounce(markdown, 1000);
+  const debouncedMarkdown = useDebounce(markdown, 1000); // 自動保存用
   const [isSaving, setIsSaving] = useState(false);
   const [lastSavedContent, setLastSavedContent] = useState<string | null>(null);
   const isMountedRef = useRef(false);
 
-  // 初期コンテンツを保存済みとして設定
+  // 初期コンテンツを保存済みとして設定 (変更なし)
   useEffect(() => {
     if (currentDocument) {
       setLastSavedContent(currentDocument.content);
@@ -49,12 +61,12 @@ export const EditorPane = React.memo(({
     };
   }, [currentDocument]);
 
-
   // 自動保存ロジック (変更なし)
   useEffect(() => {
     if (!isMountedRef.current || !isDbInitialized || !currentDocument) {
       return;
     }
+    // 自動保存は debouncedMarkdown (1秒遅延) を使う
     if (debouncedMarkdown === lastSavedContent || debouncedMarkdown === currentDocument.content) {
         return;
     }
@@ -68,7 +80,7 @@ export const EditorPane = React.memo(({
       try {
         const docToSave: DocumentType = {
           ...currentDocument,
-          content: debouncedMarkdown,
+          content: debouncedMarkdown, // 自動保存はデバウンスされた内容
           updatedAt: new Date(),
         };
         await updateDocument(docToSave);
@@ -87,7 +99,6 @@ export const EditorPane = React.memo(({
 
 
   // カーソル位置にテキストを挿入する関数 (変更なし)
-  // この関数がツールバーから呼ばれ、最終的に onChange をトリガーする
   const insertTextAtCursor = useCallback(
     (textBefore: string, textAfter = "") => {
       if (!textareaRef.current) return;
@@ -101,14 +112,7 @@ export const EditorPane = React.memo(({
         selectedText +
         textAfter +
         textarea.value.substring(end);
-
-      // ★★★ この onChange 呼び出しが重要 ★★★
-      // これにより app/page.tsx の handleEditorChange が呼ばれ、
-      // editorContent state が更新され、Textarea の value が更新される。
-      // この一連の処理がブラウザのUndoスタックに記録されることを期待。
-      onChange(newText);
-
-      // カーソル位置の調整
+      onChange(newText); // page.tsx の handleEditorChange を呼ぶ
       setTimeout(() => {
         if (textareaRef.current) {
           textareaRef.current.focus();
@@ -117,7 +121,7 @@ export const EditorPane = React.memo(({
         }
       }, 0);
     },
-    [onChange] // onChange (app/page.tsx の handleEditorChange) に依存
+    [onChange]
   );
 
   // 画像参照を挿入する関数 (変更なし)
@@ -183,7 +187,7 @@ export const EditorPane = React.memo(({
         </div>
       </div>
 
-      {/* ツールバーコンポーネント (変更なし) */}
+      {/* ツールバーコンポーネントに Undo/Redo 関連の props を渡す */}
       <EditorToolbar
         onH1Click={handleH1Click}
         onH2Click={handleH2Click}
@@ -201,15 +205,19 @@ export const EditorPane = React.memo(({
         onThemeChange={onThemeChange}
         onEditCustomCss={onEditCustomCss}
         currentDocument={currentDocument}
+        // --- ▼ Undo/Redo 関連の props を渡す ▼ ---
+        onUndo={onUndo}
+        onRedo={onRedo}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        // --- ▲ Undo/Redo 関連の props を渡す ▲ ---
       />
 
       {/* テキストエリア (変更なし) */}
       <Textarea
         ref={textareaRef}
         value={markdown}
-        // ★★★ この onChange が重要 ★★★
-        // ユーザーの直接入力はこの onChange を通じて app/page.tsx の handleEditorChange に伝わる
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => onChange(e.target.value)} // page.tsx の handleEditorChange を呼ぶ
         onScroll={handleScroll}
         className="flex-1 resize-none rounded-none border-0 p-4 font-mono text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
         placeholder="Marpプレゼンテーションを作成するには、ここに入力を始めてください..."
