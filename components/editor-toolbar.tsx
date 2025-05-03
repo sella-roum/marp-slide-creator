@@ -1,3 +1,4 @@
+// components/editor-toolbar.tsx
 "use client";
 
 import React from "react";
@@ -12,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ImageLibrary } from "./image-library";
+import { ImageLibrary } from "./image-library"; // ImageLibrary をインポート
 import {
   LinkIcon,
   CodeIcon,
@@ -24,10 +25,9 @@ import {
   QuoteIcon,
   SeparatorHorizontalIcon,
   PaletteIcon,
-  ImagePlusIcon,
   FileCodeIcon,
 } from "lucide-react";
-import type { DocumentType } from "@/lib/types"; // ★ DocumentType をインポート
+import type { DocumentType } from "@/lib/types";
 
 interface EditorToolbarProps {
   onH1Click: () => void;
@@ -45,7 +45,7 @@ interface EditorToolbarProps {
   selectedTheme: string;
   onThemeChange: (theme: string) => void;
   onEditCustomCss: () => void;
-  currentDocument: DocumentType | null; // ★ currentDocument を受け取る
+  currentDocument: DocumentType | null;
 }
 
 export const EditorToolbar = React.memo(
@@ -65,7 +65,7 @@ export const EditorToolbar = React.memo(
     selectedTheme,
     onThemeChange,
     onEditCustomCss,
-    currentDocument, // ★ Props を受け取る
+    currentDocument,
   }: EditorToolbarProps) => {
     const themes = [
       { value: "default", label: "Default" },
@@ -75,13 +75,12 @@ export const EditorToolbar = React.memo(
     ];
 
     const currentThemeLabel = themes.find(t => t.value === selectedTheme)?.label || selectedTheme;
-    // ★ カスタムCSSが存在するかどうかを判定
     const hasCustomCss = !!currentDocument?.customCss?.trim();
 
     return (
       <div className="flex flex-wrap items-center overflow-x-auto border-b p-1">
         <TooltipProvider delayDuration={100}>
-          {/* --- 既存のツールバーボタン (省略) --- */}
+          {/* --- 見出し1 ボタン --- */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="icon" onClick={onH1Click} aria-label="見出し1">
@@ -90,8 +89,71 @@ export const EditorToolbar = React.memo(
             </TooltipTrigger>
             <TooltipContent>見出し1</TooltipContent>
           </Tooltip>
-          {/* ... 他のボタン ... */}
-           <Tooltip>
+          {/* --- 見出し2 ボタン --- */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={onH2Click} aria-label="見出し2">
+                <Heading2Icon className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>見出し2</TooltipContent>
+          </Tooltip>
+          {/* --- 太字 ボタン --- */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={onBoldClick} aria-label="太字">
+                <BoldIcon className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>太字</TooltipContent>
+          </Tooltip>
+          {/* --- 斜体 ボタン --- */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={onItalicClick} aria-label="斜体">
+                <ItalicIcon className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>斜体</TooltipContent>
+          </Tooltip>
+          {/* --- リンク ボタン --- */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={onLinkClick} aria-label="リンク">
+                <LinkIcon className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>リンク</TooltipContent>
+          </Tooltip>
+          {/* --- コードブロック ボタン --- */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={onCodeClick} aria-label="コードブロック">
+                <CodeIcon className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>コードブロック</TooltipContent>
+          </Tooltip>
+          {/* --- リスト ボタン --- */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={onListClick} aria-label="リスト">
+                <ListIcon className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>リスト</TooltipContent>
+          </Tooltip>
+          {/* --- 引用 ボタン --- */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={onQuoteClick} aria-label="引用">
+                <QuoteIcon className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>引用</TooltipContent>
+          </Tooltip>
+          {/* --- 水平線/スライド区切り ボタン --- */}
+          <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="icon" onClick={onHrClick} aria-label="スライド区切り">
                 <SeparatorHorizontalIcon className="h-4 w-4" />
@@ -121,7 +183,6 @@ export const EditorToolbar = React.memo(
                   <DropdownMenuRadioItem
                     key={theme.value}
                     value={theme.value}
-                    // ★ Custom CSS は customCss がある場合のみ有効化
                     disabled={theme.value === 'custom' && !hasCustomCss}
                   >
                     {theme.label}
@@ -141,7 +202,7 @@ export const EditorToolbar = React.memo(
             <TooltipContent>カスタムCSSを編集</TooltipContent>
           </Tooltip>
 
-          {/* --- 既存の画像関連ボタン (省略) --- */}
+          {/* --- 画像URL挿入ボタン --- */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="icon" onClick={onImageUrlClick} aria-label="画像URLを挿入">
@@ -150,12 +211,19 @@ export const EditorToolbar = React.memo(
             </TooltipTrigger>
             <TooltipContent>画像URLを挿入</TooltipContent>
           </Tooltip>
+
+          {/* --- ImageLibrary の Tooltip ラップ --- */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <ImageLibrary onInsertReference={onInsertImageReference} />
+              {/* ImageLibrary コンポーネントを内包する div */}
+              <div className="inline-flex items-center justify-center">
+                <ImageLibrary onInsertReference={onInsertImageReference} />
+              </div>
             </TooltipTrigger>
             <TooltipContent>画像ライブラリを開く</TooltipContent>
           </Tooltip>
+
+          {/* --- Marpディレクティブ挿入ボタン --- */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
