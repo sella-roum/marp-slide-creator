@@ -1,27 +1,36 @@
+// hooks/use-exporter.ts
 "use client";
 
 import { useState, useCallback } from "react";
-import { preprocessMarkdownForExport, generateInteractiveHtml } from "@/lib/exportUtils"; // 作成したユーティリティをインポート
-import { downloadFile } from "@/lib/utils"; // downloadFile は既存の utils から
-import type { ExportFormat } from "@/components/export-dialog"; // ExportFormat 型をインポート
-import { useErrorHandler } from "@/hooks/use-error-handler"; // ★ インポート
+// ★ preprocessMarkdownForExport, generateInteractiveHtml をインポート
+import { preprocessMarkdownForExport, generateInteractiveHtml } from "@/lib/exportUtils";
+// ★ downloadFile, updateMarkdownTheme をインポート (updateMarkdownTheme はHTML生成時に必要)
+import { downloadFile, updateMarkdownTheme } from "@/lib/utils";
+import type { ExportFormat } from "@/components/export-dialog";
+import { useErrorHandler } from "@/hooks/use-error-handler";
+import type { DocumentType } from "@/lib/types";
+import { processMarkdownForRender } from "@/lib/markdown-processor"; // ★ processMarkdownForRender をインポート
 
 interface UseExporterProps {
-  markdown: string;
-  documentTitle: string;
+  currentDocument: DocumentType | null;
 }
 
-export function useExporter({ markdown, documentTitle }: UseExporterProps) {
+export function useExporter({ currentDocument }: UseExporterProps) {
   const [isExporting, setIsExporting] = useState(false);
-  const { handleError } = useErrorHandler(); // ★ エラーハンドラフックを使用
+  const { handleError } = useErrorHandler();
   const [exportFormat, setExportFormat] = useState<ExportFormat>("html");
-  const [includeSpeakerNotes, setIncludeSpeakerNotes] = useState(false); // スピーカーノートの状態
-  const [isDialogOpen, setIsDialogOpen] = useState(false); // ダイアログの開閉状態
+  const [includeSpeakerNotes, setIncludeSpeakerNotes] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   // エクスポート処理
   const handleExport = useCallback(async () => {
+    if (!currentDocument) {
+      handleError({ error: new Error("No document selected for export."), context: "ファイルのエクスポート" });
+      return;
+    }
+    const { content: markdown, title: documentTitle, selectedTheme, customCss } = currentDocument;
+
     if (!markdown) {
-      // エラーというより警告レベル
       console.warn("Export attempted with no markdown content.");
       return;
     }
@@ -29,35 +38,37 @@ export function useExporter({ markdown, documentTitle }: UseExporterProps) {
     setIsExporting(true);
 
     try {
-      // Markdown の前処理 (画像参照解決、Marp ディレクティブ追加)
-      const processedMarkdown = await preprocessMarkdownForExport(markdown);
-
       if (exportFormat === "markdown") {
+        const processedMarkdown = await preprocessMarkdownForExport(markdown, selectedTheme);
         downloadFile(processedMarkdown, `${documentTitle}.md`, "text/markdown");
-        // toast({ title: "成功", description: `MARKDOWNとしてエクスポートしました` }); // 成功時のトーストは任意
       } else if (exportFormat === "html") {
-        // Marp Core を動的にインポート
+        // ★ HTML生成時は元のMarkdownから画像参照を解決
+        const processedMarkdownImages = await processMarkdownForRender(markdown, new Map(), () => {});
+        // ★ 適用するテーマを決定
+        const themeToRender = selectedTheme === 'custom' ? 'default' : selectedTheme;
+        // ★ テーマディレクティブを更新したMarkdownを生成
+        const markdownWithTheme = updateMarkdownTheme(processedMarkdownImages, themeToRender);
+
         const { Marp } = await import(/* webpackChunkName: "marp-core" */ "@marp-team/marp-core");
         const marp = new Marp({ html: true, math: true, minifyCSS: false });
-        const { html, css } = marp.render(processedMarkdown);
+        // ★ テーマ反映済みのMDをレンダリング
+        const { html, css } = marp.render(markdownWithTheme);
 
-        // インタラクティブHTMLを生成
-        const fullHTML = generateInteractiveHtml(html, css, documentTitle);
+        // ★ generateInteractiveHtml に selectedTheme と customCss を渡す
+        const fullHTML = generateInteractiveHtml(html, css, documentTitle, selectedTheme, customCss);
 
         downloadFile(fullHTML, `${documentTitle}.html`, "text/html");
-        // toast({ title: "成功", description: `HTMLとしてエクスポートしました` }); // 成功時のトーストは任意
       }
 
-      setIsDialogOpen(false); // 成功したらダイアログを閉じる
+      setIsDialogOpen(false);
     } catch (error) {
-      handleError({ error, context: "ファイルのエクスポート" }); // ★ 共通ハンドラを使用
+      handleError({ error, context: "ファイルのエクスポート" });
     } finally {
       setIsExporting(false);
     }
-  }, [markdown, documentTitle, exportFormat, handleError]); // ★ handleError を依存配列に追加
-  // includeSpeakerNotes は未実装のため依存配列から除外
+  }, [currentDocument, exportFormat, handleError]);
 
-  // ダイアログを開く関数 (フォーマット指定付き)
+  // ダイアログを開く関数
   const openExportDialog = useCallback((format: ExportFormat) => {
     setExportFormat(format);
     setIsDialogOpen(true);
@@ -67,7 +78,6 @@ export function useExporter({ markdown, documentTitle }: UseExporterProps) {
   const handleOpenChange = useCallback((open: boolean) => {
     setIsDialogOpen(open);
     if (!open) {
-      // ダイアログが閉じられたらエクスポート状態をリセット
       setIsExporting(false);
     }
   }, []);
@@ -75,7 +85,6 @@ export function useExporter({ markdown, documentTitle }: UseExporterProps) {
   // スピーカーノートの状態変更ハンドラ
   const handleIncludeSpeakerNotesChange = useCallback((checked: boolean) => {
     setIncludeSpeakerNotes(checked);
-    // ここでスピーカーノートを含める処理を実装する（将来的に）
     console.log("Include speaker notes:", checked);
   }, []);
 

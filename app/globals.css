@@ -1,3 +1,4 @@
+/* app/globals.css */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -6,12 +7,19 @@
   :root {
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
+    /* 基本の文字色 (濃いグレー) */
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
     --primary: 221.2 83.2% 53.3%;
+    /* 青系 */
+    /* ▼ primary-foreground を変更 ▼ */
     --primary-foreground: 210 40% 98%;
+    /* 元: 白系 */
+    /* --primary-foreground: 0 0% 9%; */
+    /* 例: 黒系にする場合 */
+    /* ▲ primary-foreground を変更 ▲ */
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
     --muted: 210 40% 96.1%;
@@ -23,18 +31,22 @@
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
+    /* primary と同じ色 */
     --radius: 0.5rem;
   }
 
   .dark {
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
+    /* 基本の文字色 (白系) */
     --card: 222.2 84% 4.9%;
     --card-foreground: 210 40% 98%;
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
     --primary: 217.2 91.2% 59.8%;
+    /* 明るい青 */
     --primary-foreground: 222.2 47.4% 11.2%;
+    /* 暗い文字 (これはOK) */
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
     --muted: 217.2 32.6% 17.5%;
@@ -46,6 +58,7 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 224.3 76.3% 48%;
+    /* ダークテーマのリング色 */
   }
 }
 
@@ -53,7 +66,17 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
+    font-family: Arial, Helvetica, sans-serif;
+    /* styles/globals.css から移動 */
+  }
+}
+
+/* styles/globals.css にあったものをここに統合 */
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
   }
 }

@@ -6,33 +6,39 @@ import type {
   GeminiRequestType,
   GeminiResponseType,
   ChatMessageType,
+  GeminiTaskType,
 } from "@/lib/types";
 import { addChatMessage, getChatMessages, clearChatMessages } from "@/lib/db";
 import { useDb } from "@/lib/db-context";
-import { v4 as uuidv4 } from "uuid"; // uuid をインポート
-import { useErrorHandler } from "@/hooks/use-error-handler"; // ★ インポート
+import { v4 as uuidv4 } from "uuid";
+import { useErrorHandler } from "@/hooks/use-error-handler";
+import { useToast } from "@/hooks/use-toast"; // useToast をインポート
+
+// 履歴に含める最大メッセージ数
+const MAX_HISTORY_LENGTH = 10;
 
 interface UseChatProps {
   currentDocument: DocumentType | null;
   onApplyToEditor: (content: string) => void;
+  onApplyCustomCss: (css: string) => void;
 }
 
-export function useChat({ currentDocument, onApplyToEditor }: UseChatProps) {
+export function useChat({ currentDocument, onApplyToEditor, onApplyCustomCss }: UseChatProps) {
   const { isDbInitialized } = useDb();
-  const { handleError } = useErrorHandler(); // ★ エラーハンドラフックを使用
+  const { handleError } = useErrorHandler();
+  const { toast } = useToast(); // toast を取得
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [copiedStates, setCopiedStates] = useState<Record<string, boolean>>({});
-  const viewportRef = useRef<HTMLDivElement | null>(null); // ChatMessageList で設定される想定
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const [selectedTaskType, setSelectedTaskType] = useState<GeminiTaskType>("GeneralConsultation");
 
-  // ScrollArea の Viewport を取得するための Ref を設定する関数
   const setViewportRef = useCallback((element: HTMLDivElement | null) => {
     viewportRef.current = element;
   }, []);
 
-  // メッセージ追加時に一番下にスクロール
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     setTimeout(() => {
       if (viewportRef.current) {
@@ -41,7 +47,6 @@ export function useChat({ currentDocument, onApplyToEditor }: UseChatProps) {
     }, 100);
   }, []);
 
-  // ドキュメント変更時にチャット履歴を読み込む
   useEffect(() => {
     const loadHistory = async () => {
       if (!isDbInitialized) {
@@ -60,7 +65,7 @@ export function useChat({ currentDocument, onApplyToEditor }: UseChatProps) {
           setMessages(history);
           scrollToBottom("auto");
         } catch (error) {
-          handleError({ error, context: "チャット履歴の読み込み" }); // ★ 共通ハンドラを使用
+          handleError({ error, context: "チャット履歴の読み込み" });
         } finally {
           setIsHistoryLoading(false);
         }
@@ -71,19 +76,18 @@ export function useChat({ currentDocument, onApplyToEditor }: UseChatProps) {
       }
     };
     loadHistory();
-  }, [currentDocument?.id, scrollToBottom, isDbInitialized, handleError]); // ★ handleError を依存配列に追加
+  }, [currentDocument?.id, scrollToBottom, isDbInitialized, handleError]);
 
-  // 新しいメッセージをDBに保存する関数
   const saveMessage = useCallback(
     async (message: Omit<ChatMessageType, "id">) => {
       if (!isDbInitialized || !currentDocument?.id) return;
       try {
         await addChatMessage({ ...message, documentId: currentDocument.id });
       } catch (error) {
-        handleError({ error, context: "チャットメッセージの保存" }); // ★ 共通ハンドラを使用
+        handleError({ error, context: "チャットメッセージの保存" });
       }
     },
-    [currentDocument?.id, isDbInitialized, handleError] // ★ handleError を依存配列に追加
+    [currentDocument?.id, isDbInitialized, handleError]
   );
 
   // メッセージ送信処理
@@ -91,26 +95,49 @@ export function useChat({ currentDocument, onApplyToEditor }: UseChatProps) {
     const prompt = inputValue.trim();
     if (!prompt || isLoading || !currentDocument?.id || !isDbInitialized) return;
 
+    const userMessageContent = prompt;
+
     const newUserMessage: Omit<ChatMessageType, "id"> = {
       role: "user",
-      content: prompt,
+      content: userMessageContent,
       timestamp: new Date(),
       documentId: currentDocument.id,
     };
 
-    // UUID を使って仮のIDを付与
     const tempUserMessageId = uuidv4();
-    setMessages((prev) => [...prev, { ...newUserMessage, id: tempUserMessageId }]);
+    const currentMessages = [...messages, { ...newUserMessage, id: tempUserMessageId }];
+    setMessages(currentMessages);
     setInputValue("");
     setIsLoading(true);
     scrollToBottom();
 
-    await saveMessage(newUserMessage); // DBにはIDなしで保存 (db.ts側でUUID付与)
+    await saveMessage(newUserMessage);
+
+    const historyForApi = currentMessages
+      .filter((msg) => msg.role === "user" || msg.role === "assistant")
+      .slice(-MAX_HISTORY_LENGTH);
+
+    let thinkingMessage = "AIが応答を生成中です...";
+    if (selectedTaskType === "GenerateSlideContent") {
+      thinkingMessage = "AIがスライドコンテンツを生成中です...";
+    } else if (selectedTaskType === "GenerateTheme") {
+      thinkingMessage = "AIがテーマCSSを生成中です...";
+    }
+    const thinkingMsg: Omit<ChatMessageType, "id"> = {
+      role: "system",
+      content: thinkingMessage,
+      timestamp: new Date(),
+      documentId: currentDocument.id,
+    };
+    setMessages((prev) => [...prev, { ...thinkingMsg, id: uuidv4() }]);
+    scrollToBottom();
 
     try {
-      const requestBody: GeminiRequestType = {
+      const requestBody: GeminiRequestType & { history?: ChatMessageType[] } = {
         prompt: prompt,
         context: { currentMarkdown: currentDocument.content || "" },
+        taskType: selectedTaskType,
+        history: historyForApi,
       };
 
       const response = await fetch("/api/gemini/generate", {
@@ -118,6 +145,8 @@ export function useChat({ currentDocument, onApplyToEditor }: UseChatProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
       });
+
+      setMessages((prev) => prev.filter((msg) => msg.content !== thinkingMessage || msg.role !== "system"));
 
       const data: GeminiResponseType = await response.json();
 
@@ -129,31 +158,66 @@ export function useChat({ currentDocument, onApplyToEditor }: UseChatProps) {
         const newAssistantMessage: Omit<ChatMessageType, "id"> = {
           role: "assistant",
           content: data.result.text,
-          markdownCode: data.result.markdownCode,
+          slideMarkdown: data.result.slideMarkdown,
+          cssCode: data.result.cssCode,
           timestamp: new Date(),
           documentId: currentDocument.id,
         };
-        // UUID を使って仮のIDを付与
         const tempAssistantMessageId = uuidv4();
         setMessages((prev) => [...prev, { ...newAssistantMessage, id: tempAssistantMessageId }]);
-        await saveMessage(newAssistantMessage); // DBにはIDなしで保存
+        await saveMessage(newAssistantMessage);
+
+        // --- ▼ CSS自動適用を削除 ▼ ---
+        // if (selectedTaskType === "GenerateTheme" && data.result.cssCode) {
+        //   try {
+        //     // onApplyCustomCss(data.result.cssCode); // ← この行を削除またはコメントアウト
+        //     const successMsg: Omit<ChatMessageType, "id"> = {
+        //       role: "system",
+        //       content: "✅ AIがテーマCSSを生成しました。「CSSに適用」ボタンで適用できます。", // メッセージを修正
+        //       timestamp: new Date(),
+        //       documentId: currentDocument.id,
+        //     };
+        //     setMessages((prev) => [...prev, { ...successMsg, id: uuidv4() }]);
+        //     await saveMessage(successMsg);
+        //   } catch (applyError) {
+        //      handleError({ error: applyError, context: "生成されたCSSの適用" });
+        //      const applyErrorMsg: Omit<ChatMessageType, "id"> = {
+        //        role: "system",
+        //        content: `⚠️ 生成されたCSSの適用中にエラーが発生しました: ${applyError instanceof Error ? applyError.message : '不明なエラー'}`,
+        //        timestamp: new Date(),
+        //        documentId: currentDocument.id,
+        //      };
+        //      setMessages((prev) => [...prev, { ...applyErrorMsg, id: uuidv4() }]);
+        //      await saveMessage(applyErrorMsg);
+        //   }
+        // } else if (selectedTaskType === "GenerateTheme" && !data.result.cssCode) {
+        //    const noCssMsg: Omit<ChatMessageType, "id"> = {
+        //      role: "system",
+        //      content: "⚠️ AIは応答しましたが、有効なCSSコードが見つかりませんでした。",
+        //      timestamp: new Date(),
+        //      documentId: currentDocument.id,
+        //    };
+        //    setMessages((prev) => [...prev, { ...noCssMsg, id: uuidv4() }]);
+        //    await saveMessage(noCssMsg);
+        // }
+        // --- ▲ CSS自動適用を削除 ▲ ---
+
       } else {
         throw new Error("AIからの応答が空でした。");
       }
     } catch (error) {
-      // console.error は handleError 内で行われる
+      setMessages((prev) => prev.filter((msg) => msg.content !== thinkingMessage || msg.role !== "system"));
       const errorContent = `エラー: ${error instanceof Error ? error.message : "AIとの通信中にエラーが発生しました。"}`;
-      handleError({ error, context: "AI応答の取得", userMessage: errorContent }); // ★ userMessage を指定
+      handleError({ error, context: `AI ${selectedTaskType} 処理`, userMessage: errorContent });
       const errorMessage: Omit<ChatMessageType, "id"> = {
         role: "system",
         content: errorContent,
         timestamp: new Date(),
         documentId: currentDocument.id,
       };
-      // UUID を使って仮のIDを付与
       const tempErrorMessageId = uuidv4();
       setMessages((prev) => [...prev, { ...errorMessage, id: tempErrorMessageId }]);
-      await saveMessage(errorMessage); // DBにはIDなしで保存
+      await saveMessage(errorMessage);
     } finally {
       setIsLoading(false);
       document.getElementById("chat-input")?.focus();
@@ -166,55 +230,82 @@ export function useChat({ currentDocument, onApplyToEditor }: UseChatProps) {
     isDbInitialized,
     saveMessage,
     scrollToBottom,
-    handleError, // ★ handleError を依存配列に追加
+    handleError,
+    // onApplyCustomCss, // ← 依存配列から削除 (自動適用しないため)
+    selectedTaskType,
+    messages,
   ]);
 
-  // チャット履歴クリア処理
+  // チャット履歴クリア処理 (変更なし)
   const handleClearChat = useCallback(async () => {
-    if (!isDbInitialized || !currentDocument?.id) return;
+     if (!isDbInitialized || !currentDocument?.id) return;
     try {
       await clearChatMessages(currentDocument.id);
       setMessages([]);
-      // toast({ title: "チャット履歴をクリアしました" }); // 成功時のトーストは任意
     } catch (error) {
-      handleError({ error, context: "チャット履歴のクリア" }); // ★ 共通ハンドラを使用
+      handleError({ error, context: "チャット履歴のクリア" });
     }
-  }, [currentDocument?.id, isDbInitialized, handleError]); // ★ handleError を依存配列に追加
+  }, [currentDocument?.id, isDbInitialized, handleError]);
 
-  // コードをクリップボードにコピー
-  const handleCopyCode = useCallback(
+  // コードコピーハンドラ (変更なし)
+  const handleCopyMarkdown = useCallback(
     (code: string | null | undefined, messageId: string) => {
       if (!code) return;
-      navigator.clipboard
-        .writeText(code)
-        .then(() => {
-          setCopiedStates((prev) => ({ ...prev, [messageId]: true }));
-          // toast({ title: "コードをコピーしました" }); // 成功時のトーストは任意
-          setTimeout(() => {
-            setCopiedStates((prev) => ({ ...prev, [messageId]: false }));
-          }, 2000);
-        })
-        .catch((err) => {
-          handleError({ error: err, context: "コードのコピー" }); // ★ 共通ハンドラを使用
-        });
+      navigator.clipboard.writeText(code).then(() => {
+        setCopiedStates((prev) => ({ ...prev, [`md-${messageId}`]: true }));
+        setTimeout(() => {
+          setCopiedStates((prev) => ({ ...prev, [`md-${messageId}`]: false }));
+        }, 2000);
+      }).catch((err) => handleError({ error: err, context: "Markdownコードのコピー" }));
     },
-    [handleError] // ★ handleError を依存配列に追加
+    [handleError]
   );
 
-  // コードをエディタに適用
-  const handleApplyCode = useCallback(
+  const handleCopyCss = useCallback(
+    (code: string | null | undefined, messageId: string) => {
+      if (!code) return;
+      navigator.clipboard.writeText(code).then(() => {
+        setCopiedStates((prev) => ({ ...prev, [`css-${messageId}`]: true }));
+        setTimeout(() => {
+          setCopiedStates((prev) => ({ ...prev, [`css-${messageId}`]: false }));
+        }, 2000);
+      }).catch((err) => handleError({ error: err, context: "CSSコードのコピー" }));
+    },
+    [handleError]
+  );
+
+  // コード適用ハンドラ (変更なし)
+  const handleApplyMarkdown = useCallback(
     (codeToApply: string | null | undefined) => {
       if (codeToApply) {
         onApplyToEditor(codeToApply);
-        // toast({ title: "抽出されたコードをエディタに適用しました" }); // 成功時のトーストは任意
+        toast({ title: "成功", description: "Markdownをエディタに適用しました。" }); // 適用時にトースト表示
       } else {
-        // エラーではなく、適用できるコードがない場合の警告
-        console.warn("Attempted to apply code, but no markdown code was found in the message.");
+        console.warn("Attempted to apply Markdown, but no code was found.");
+        toast({ title: "エラー", description: "適用するMarkdownコードが見つかりません。", variant: "destructive" });
       }
     },
-    [onApplyToEditor]
+    [onApplyToEditor, toast] // toast を依存配列に追加
   );
 
+  const handleApplyCss = useCallback(
+    (codeToApply: string | null | undefined) => {
+      if (codeToApply) {
+        try {
+          onApplyCustomCss(codeToApply);
+          toast({ title: "成功", description: "カスタムCSSを適用しました。" }); // 適用時にトースト表示
+        } catch (error) {
+           handleError({ error, context: "カスタムCSSの適用" });
+        }
+      } else {
+        console.warn("Attempted to apply CSS, but no code was found.");
+        toast({ title: "エラー", description: "適用するCSSコードが見つかりません。", variant: "destructive" });
+      }
+    },
+    [onApplyCustomCss, toast, handleError] // toast, handleError を依存配列に追加
+  );
+
+  // フックの戻り値 (変更なし)
   return {
     messages,
     inputValue,
@@ -224,8 +315,12 @@ export function useChat({ currentDocument, onApplyToEditor }: UseChatProps) {
     copiedStates,
     handleSendMessage,
     handleClearChat,
-    handleCopyCode,
-    handleApplyCode,
-    setViewportRef, // viewportRef を設定するための関数を返す
+    handleCopyMarkdown,
+    handleCopyCss,
+    handleApplyMarkdown,
+    handleApplyCss,
+    setViewportRef,
+    selectedTaskType,
+    setSelectedTaskType,
   };
 }

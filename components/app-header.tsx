@@ -1,3 +1,4 @@
+// components/app-header.tsx
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
@@ -12,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ExportDropdown } from "@/components/export-dropdown";
-// PanelBottomIcon をインポート
+import { ThemeToggle } from "./theme-toggle"; // ★ ThemeToggle をインポート
 import {
   MessageSquareIcon,
   CodeIcon,
@@ -28,7 +29,6 @@ import type { LayoutMode } from "@/lib/constants";
 
 interface AppHeaderProps {
   currentDocument: DocumentType | null;
-  markdownContent: string;
   layoutMode: LayoutMode;
   setLayoutMode: (mode: LayoutMode) => void;
   isChatVisible: boolean;
@@ -41,7 +41,6 @@ interface AppHeaderProps {
 export const AppHeader: React.FC<AppHeaderProps> = React.memo(
   ({
     currentDocument,
-    markdownContent,
     layoutMode,
     setLayoutMode,
     isChatVisible,
@@ -127,9 +126,12 @@ export const AppHeader: React.FC<AppHeaderProps> = React.memo(
 
           {/* エクスポートボタン */}
           <ExportDropdown
-            markdown={markdownContent} // ExportDropdown 内のトリガーにも aria-label を検討
-            documentTitle={currentDocument?.title || "Untitled"}
+            currentDocument={currentDocument}
           />
+
+          {/* --- ★ テーマ切り替えボタンを追加 --- */}
+          <ThemeToggle />
+          {/* --- ここまで --- */}
         </div>
       </header>
     );

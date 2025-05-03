@@ -1,16 +1,17 @@
+// components/image-library.tsx
 "use client";
 
 import React, { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogTrigger } from "@/components/ui/dialog"; // Dialog と DialogTrigger をインポート
+import { Dialog, DialogTrigger } from "@/components/ui/dialog";
 import { ImagePlusIcon } from "lucide-react";
-import { ImageLibraryDialogContent } from "./image-library-dialog-content"; // 新しいコンポーネント名をインポート
+import { ImageLibraryDialogContent } from "./image-library-dialog-content";
 
 interface ImageLibraryProps {
   onInsertReference: (reference: string) => void;
 }
 
-// トリガーボタンのコンポーネント定義はそのまま
+// ImageLibraryTrigger は変更なし
 const ImageLibraryTrigger = React.forwardRef<HTMLButtonElement>((props, ref) => (
   <Button variant="ghost" size="icon" ref={ref} {...props} aria-label="画像ライブラリを開く">
     <ImagePlusIcon className="h-4 w-4" />
@@ -19,7 +20,6 @@ const ImageLibraryTrigger = React.forwardRef<HTMLButtonElement>((props, ref) => 
 ));
 ImageLibraryTrigger.displayName = "ImageLibraryTrigger";
 
-// ImageLibrary を forwardRef でラップし、ref をトリガーに渡せるようにする
 export const ImageLibrary = React.forwardRef<HTMLButtonElement, ImageLibraryProps>(
   ({ onInsertReference }, ref) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -33,18 +33,16 @@ export const ImageLibrary = React.forwardRef<HTMLButtonElement, ImageLibraryProp
     }, []);
 
     return (
-      // Dialog コンポーネントでラップ
       <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-        {/* DialogTrigger が ImageLibraryTrigger をラップ */}
+        {/* Tooltip のラップを削除し、元の構造に戻す */}
         <DialogTrigger asChild>
-          {/* ImageLibraryTrigger に ref を渡す */}
           <ImageLibraryTrigger ref={ref} />
         </DialogTrigger>
-        {/* ダイアログの中身をレンダリング */}
-        {/* isOpen が true の時だけレンダリングしても良いが、Radix UI が内部で管理してくれる */}
+
+        {/* ダイアログの中身 */}
         <ImageLibraryDialogContent
           onInsertReference={onInsertReference}
-          closeDialog={closeDialog} // 閉じる関数を渡す
+          closeDialog={closeDialog}
         />
       </Dialog>
     );

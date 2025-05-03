@@ -1,20 +1,23 @@
+// components/chat-pane.tsx
 "use client";
 
-import React from "react"; // React をインポート
-import { useChat } from "@/hooks/use-chat"; // 作成したカスタムフックをインポート
-import { ChatHeader } from "./chat-header"; // 作成したコンポーネントをインポート
-import { ChatMessageList } from "./chat-message-list"; // 作成したコンポーネントをインポート
-import { ChatInputArea } from "./chat-input-area"; // 作成したコンポーネントをインポート
+import React from "react";
+import { useChat } from "@/hooks/use-chat";
+import { ChatHeader } from "./chat-header";
+import { ChatMessageList } from "./chat-message-list";
+import { ChatInputArea } from "./chat-input-area";
 import type { DocumentType } from "@/lib/types";
-import { useDb } from "@/lib/db-context"; // isDbInitialized を取得するために必要
+import { useDb } from "@/lib/db-context";
 
 interface ChatPaneProps {
   currentDocument: DocumentType | null;
   onApplyToEditor: (content: string) => void;
+  onApplyCustomCss: (css: string) => void;
 }
 
-export const ChatPane = React.memo(({ currentDocument, onApplyToEditor }: ChatPaneProps) => {
-  const { isDbInitialized } = useDb(); // DB初期化状態を直接取得
+export const ChatPane = React.memo(({ currentDocument, onApplyToEditor, onApplyCustomCss }: ChatPaneProps) => {
+  const { isDbInitialized } = useDb();
+  // --- ▼ useChat から受け取るハンドラを更新 ▼ ---
   const {
     messages,
     inputValue,
@@ -24,10 +27,15 @@ export const ChatPane = React.memo(({ currentDocument, onApplyToEditor }: ChatPa
     copiedStates,
     handleSendMessage,
     handleClearChat,
-    handleCopyCode,
-    handleApplyCode,
-    setViewportRef, // useChat から viewportRef を設定する関数を取得
-  } = useChat({ currentDocument, onApplyToEditor }); // カスタムフックを使用
+    handleCopyMarkdown, // 変更
+    handleCopyCss,      // 追加
+    handleApplyMarkdown,// 変更
+    handleApplyCss,     // 追加
+    setViewportRef,
+    selectedTaskType,
+    setSelectedTaskType,
+  } = useChat({ currentDocument, onApplyToEditor, onApplyCustomCss });
+  // --- ▲ useChat から受け取るハンドラを更新 ▲ ---
 
   return (
     <div className="flex h-full flex-col bg-background">
@@ -36,18 +44,22 @@ export const ChatPane = React.memo(({ currentDocument, onApplyToEditor }: ChatPa
         messages={messages}
         isLoading={isLoading}
         isHistoryLoading={isHistoryLoading}
-        isDbInitialized={isDbInitialized} // isDbInitialized を渡す
+        isDbInitialized={isDbInitialized}
         onClearChat={handleClearChat}
       />
+      {/* --- ▼ ChatMessageList に渡す Props を更新 ▼ --- */}
       <ChatMessageList
         messages={messages}
         isLoading={isLoading}
         isHistoryLoading={isHistoryLoading}
         copiedStates={copiedStates}
-        onCopyCode={handleCopyCode}
-        onApplyCode={handleApplyCode}
-        setViewportRef={setViewportRef} // viewportRef を設定する関数を渡す
+        onCopyMarkdown={handleCopyMarkdown} // 渡す
+        onCopyCss={handleCopyCss}          // 渡す
+        onApplyMarkdown={handleApplyMarkdown} // 渡す
+        onApplyCss={handleApplyCss}         // 渡す
+        setViewportRef={setViewportRef}
       />
+      {/* --- ▲ ChatMessageList に渡す Props を更新 ▲ --- */}
       <ChatInputArea
         inputValue={inputValue}
         onInputChange={setInputValue}
@@ -55,7 +67,9 @@ export const ChatPane = React.memo(({ currentDocument, onApplyToEditor }: ChatPa
         isLoading={isLoading}
         isHistoryLoading={isHistoryLoading}
         currentDocument={currentDocument}
-        isDbInitialized={isDbInitialized} // isDbInitialized を渡す
+        isDbInitialized={isDbInitialized}
+        selectedTaskType={selectedTaskType}
+        onTaskTypeChange={setSelectedTaskType}
       />
     </div>
   );

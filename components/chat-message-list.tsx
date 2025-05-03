@@ -1,6 +1,8 @@
 "use client";
 
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, type HTMLAttributes, type ClassAttributes } from "react";
+import ReactMarkdown, { type Options as ReactMarkdownOptions } from 'react-markdown';
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -11,18 +13,43 @@ import {
   CheckIcon,
   Loader2Icon,
   ClipboardPasteIcon,
+  PaletteIcon,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ChatMessageType } from "@/lib/types";
+import { cn } from "@/lib/utils";
+
+// rehype-sanitize のスキーマをカスタマイズしてクラス属性を許可
+const schema = {
+  ...defaultSchema,
+  attributes: {
+    ...defaultSchema.attributes,
+    code: [...(defaultSchema.attributes?.code || []), 'className', 'style'],
+    span: [...(defaultSchema.attributes?.span || []), 'className', 'style'],
+    div: [...(defaultSchema.attributes?.div || []), 'className', 'style'],
+    pre: [...(defaultSchema.attributes?.pre || []), 'className', 'style'],
+    '*': [...(defaultSchema.attributes?.['*'] || []), 'className', 'style'],
+  },
+};
+
 
 interface ChatMessageListProps {
   messages: ChatMessageType[];
   isLoading: boolean;
   isHistoryLoading: boolean;
   copiedStates: Record<string, boolean>;
-  onCopyCode: (code: string | null | undefined, messageId: string) => void;
-  onApplyCode: (codeToApply: string | null | undefined) => void;
-  setViewportRef: (element: HTMLDivElement | null) => void; // Ref を受け取るための Prop
+  onCopyMarkdown: (code: string | null | undefined, messageId: string) => void;
+  onCopyCss: (code: string | null | undefined, messageId: string) => void;
+  onApplyMarkdown: (codeToApply: string | null | undefined) => void;
+  onApplyCss: (codeToApply: string | null | undefined) => void;
+  setViewportRef: (element: HTMLDivElement | null) => void;
+}
+
+interface CodeProps extends HTMLAttributes<HTMLElement> {
+  node?: any;
+  inline?: boolean;
+  className?: string;
+  children?: React.ReactNode;
 }
 
 export const ChatMessageList = React.memo(
@@ -31,21 +58,21 @@ export const ChatMessageList = React.memo(
     isLoading,
     isHistoryLoading,
     copiedStates,
-    onCopyCode,
-    onApplyCode,
-    setViewportRef, // Prop を受け取る
+    onCopyMarkdown,
+    onCopyCss,
+    onApplyMarkdown,
+    onApplyCss,
+    setViewportRef,
   }: ChatMessageListProps) => {
     const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-    // ScrollArea の Viewport を取得して親コンポーネント (useChat フック) に渡す
     useEffect(() => {
       if (scrollAreaRef.current) {
         const viewportElement = scrollAreaRef.current.querySelector<HTMLDivElement>(
           "div[data-radix-scroll-area-viewport]"
         );
-        setViewportRef(viewportElement); // Ref を設定
+        setViewportRef(viewportElement);
       }
-      // setViewportRef は useCallback でメモ化されている想定
     }, [setViewportRef]);
 
     return (
@@ -64,13 +91,13 @@ export const ChatMessageList = React.memo(
           {!isHistoryLoading &&
             messages.map((message) => (
               <div
-                key={message.id} // DB永続化前の仮IDでも動作
-                className={`flex items-end gap-2 ${
+                key={message.id}
+                className={`flex items-start gap-2 ${
                   message.role === "user" ? "justify-end" : "justify-start"
                 }`}
               >
                 {message.role === "assistant" && (
-                  <Avatar className="h-6 w-6 flex-shrink-0 self-start">
+                  <Avatar className="h-6 w-6 flex-shrink-0">
                     <AvatarFallback>
                       <BotIcon className="h-4 w-4" />
                     </AvatarFallback>
@@ -78,40 +105,112 @@ export const ChatMessageList = React.memo(
                 )}
                 {message.role !== "system" && (
                   <div
-                    className={`max-w-[85%] rounded-lg p-3 md:max-w-[75%] ${
+                    className={cn( // cnユーティリティを使用
+                      "max-w-[95%] sm:max-w-[85%] md:max-w-[80%] rounded-lg p-3 break-words",
                       message.role === "user"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-muted-foreground"
-                    } whitespace-pre-wrap break-words`}
+                        ? "bg-primary text-primary-foreground" // ユーザーメッセージの背景と基本文字色
+                        : "bg-muted" // アシスタントメッセージの背景
+                    )}
                   >
-                    {message.content}
-                    {message.role === "assistant" && message.markdownCode && (
+                    {/* proseクラスを適用するラッパーdiv */}
+                    <div className={cn(
+                       "prose prose-sm dark:prose-invert max-w-none",
+                       "prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-pre:my-2 prose-blockquote:my-1",
+                       // ▼ ユーザーメッセージの場合、proseのデフォルト色を上書き ▼
+                       message.role === 'user' && [
+                         "prose-headings:text-primary-foreground",
+                         "prose-p:text-primary-foreground",
+                         "prose-strong:text-primary-foreground",
+                         "prose-ul:text-primary-foreground",
+                         "prose-ol:text-primary-foreground",
+                         "prose-li:text-primary-foreground",
+                         "prose-blockquote:text-primary-foreground/90", // 少し薄くする場合
+                         "prose-a:text-primary-foreground/90 hover:prose-a:text-primary-foreground", // リンク色
+                         "prose-code:text-primary-foreground", // インラインコードの色
+                         // ダークモード時の上書きも必要なら追加: dark:prose-p:text-primary-foreground など
+                       ]
+                       // ▲ ユーザーメッセージの場合、proseのデフォルト色を上書き ▲
+                    )}>
+                      <ReactMarkdown
+                        rehypePlugins={[[rehypeSanitize, schema]]}
+                        components={{
+                          pre({ node, className, children, ...props }) {
+                            const preProps = props as ClassAttributes<HTMLPreElement> & HTMLAttributes<HTMLPreElement>;
+                            // コードブロックの背景は共通で良いか、ユーザーメッセージで変えるか検討
+                            return (
+                              <pre className={cn(className, "bg-black/80 text-white p-2 rounded overflow-x-auto my-2")} {...preProps}>
+                                {children}
+                              </pre>
+                            );
+                          },
+                          code({ node, inline, className, children, ...props }: CodeProps) {
+                            const codeProps = props as ClassAttributes<HTMLElement> & HTMLAttributes<HTMLElement>;
+                            const match = /language-(\w+)/.exec(className || '');
+                            // インラインコードは prose-code で色指定されるので、ここではクラス付与のみ
+                            return !inline ? (
+                              <code className={cn(className, "font-mono text-xs text-white p-0 bg-transparent")} {...codeProps}>
+                                {children}
+                              </code>
+                            ) : (
+                              <code className={cn(className, "rounded px-1 py-0.5 font-mono text-xs")} {...codeProps}>
+                                {children}
+                              </code>
+                            );
+                          },
+                          a({ node, ...props }) {
+                             const anchorProps = props as ClassAttributes<HTMLAnchorElement> & HTMLAttributes<HTMLAnchorElement>;
+                             // prose-a で色指定されるので、ここではクラス付与のみ
+                             return <a target="_blank" rel="noopener noreferrer" className="hover:underline" {...anchorProps} />;
+                          }
+                        }}
+                      >
+                        {message.content}
+                      </ReactMarkdown>
+                    </div>
+
+                    {/* ボタン表示ロジック (変更なし) */}
+                    {message.role === "assistant" && (message.slideMarkdown || message.cssCode) && (
                       <div className="mt-2 flex flex-wrap gap-2 border-t border-muted-foreground/20 pt-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-xs"
-                          onClick={() => onCopyCode(message.markdownCode, message.id)}
-                          aria-label={`メッセージ ${message.id} のコードをコピー`}
-                        >
-                          {copiedStates[message.id] ? (
-                            <CheckIcon className="mr-1 h-3 w-3" />
-                          ) : (
-                            <CopyIcon className="mr-1 h-3 w-3" />
-                          )}
-                          コードコピー
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-xs"
-                          onClick={() => onApplyCode(message.markdownCode)}
-                          disabled={!message.markdownCode}
-                          aria-label={`メッセージ ${message.id} のコードをエディタに適用`}
-                        >
-                          <ClipboardPasteIcon className="mr-1 h-3 w-3" />
-                          エディタに適用
-                        </Button>
+                        {message.slideMarkdown && (
+                          <>
+                            <Button
+                              variant="ghost" size="sm" className="h-7 px-2 text-xs"
+                              onClick={() => onCopyMarkdown(message.slideMarkdown, message.id)}
+                              aria-label={`メッセージ ${message.id} のMarkdownコードをコピー`}
+                            >
+                              {copiedStates[`md-${message.id}`] ? <CheckIcon className="mr-1 h-3 w-3" /> : <CopyIcon className="mr-1 h-3 w-3" />}
+                              Markdownコピー
+                            </Button>
+                            <Button
+                              variant="ghost" size="sm" className="h-7 px-2 text-xs"
+                              onClick={() => onApplyMarkdown(message.slideMarkdown)}
+                              aria-label={`メッセージ ${message.id} のMarkdownコードをエディタに適用`}
+                            >
+                              <ClipboardPasteIcon className="mr-1 h-3 w-3" />
+                              エディタに適用
+                            </Button>
+                          </>
+                        )}
+                        {message.cssCode && (
+                          <>
+                            <Button
+                              variant="ghost" size="sm" className="h-7 px-2 text-xs"
+                              onClick={() => onCopyCss(message.cssCode, message.id)}
+                              aria-label={`メッセージ ${message.id} のCSSコードをコピー`}
+                            >
+                              {copiedStates[`css-${message.id}`] ? <CheckIcon className="mr-1 h-3 w-3" /> : <CopyIcon className="mr-1 h-3 w-3" />}
+                              CSSコピー
+                            </Button>
+                            <Button
+                              variant="ghost" size="sm" className="h-7 px-2 text-xs"
+                              onClick={() => onApplyCss(message.cssCode)}
+                              aria-label={`メッセージ ${message.id} のCSSコードをカスタムCSSに適用`}
+                            >
+                              <PaletteIcon className="mr-1 h-3 w-3" />
+                              CSSに適用
+                            </Button>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
@@ -131,13 +230,13 @@ export const ChatMessageList = React.memo(
               </div>
             ))}
           {isLoading && !isHistoryLoading && (
-            <div className="flex items-end justify-start gap-2">
-              <Avatar className="h-6 w-6 flex-shrink-0 self-start">
+            <div className="flex items-start gap-2">
+              <Avatar className="h-6 w-6 flex-shrink-0">
                 <AvatarFallback>
                   <BotIcon className="h-4 w-4" />
                 </AvatarFallback>
               </Avatar>
-              <div className="max-w-[75%] rounded-lg bg-muted p-3">
+              <div className="max-w-[80%] rounded-lg bg-muted p-3">
                 <Skeleton className="flex h-4 w-16 items-center">
                   <Loader2Icon className="h-3 w-3 animate-spin" />
                 </Skeleton>
