@@ -1,4 +1,3 @@
-// lib/exportUtils.ts
 import { processMarkdownForRender } from "./markdown-processor";
 // ★ downloadFile と updateMarkdownTheme を lib/utils からインポート
 import { downloadFile, updateMarkdownTheme } from "./utils";

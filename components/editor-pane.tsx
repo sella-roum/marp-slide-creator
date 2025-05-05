@@ -1,4 +1,3 @@
-// components/editor-pane.tsx
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react";

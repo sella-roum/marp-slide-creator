@@ -1,4 +1,3 @@
-// app/api/gemini/generate/route.ts
 import { type NextRequest, NextResponse } from "next/server";
 import {
   GoogleGenAI,
@@ -53,7 +52,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<GeminiRes
     }
 
     const ai = new GoogleGenAI({ apiKey: API_KEY });
-    const modelName = "gemini-2.5-flash-preview-04-17"; // "gemini-2.0-flash";
+    // --- ▼ モデル名を定義 ▼ ---
+    const PRIMARY_MODEL_NAME = "gemini-2.5-flash-preview-04-17";
+    const FALLBACK_MODEL_NAME = "gemini-2.0-flash";
+    // --- ▲ モデル名を定義 ▲ ---
 
     // --- システムプロンプトの構築 (変更なし) ---
     let systemInstructionText = "";
@@ -130,94 +132,120 @@ ${currentMarkdownText}
     const contentsForApi: Content[] = [...formattedHistory, userContent];
     // --- ここまで ---
 
+    // --- ▼ Gemini API 呼び出しとリトライロジック ▼ ---
+    let response: GenerateContentResponse;
     try {
+      // 1回目の試行 (プライマリモデル)
+      console.log(`Attempting generation with primary model: ${PRIMARY_MODEL_NAME}`);
       const generationConfig: GenerateContentConfig = {};
-
-      const response: GenerateContentResponse = await ai.models.generateContent({
-        model: modelName,
-        contents: contentsForApi, // 結合した contents を渡す
+      response = await ai.models.generateContent({
+        model: PRIMARY_MODEL_NAME,
+        contents: contentsForApi,
         config: {
           ...generationConfig,
           systemInstruction: systemInstructionContent,
         },
       });
+      console.log(`Generation successful with primary model: ${PRIMARY_MODEL_NAME}`);
 
-      // --- ▼ レスポンス処理 (修正) ▼ ---
-      const resultText = response.text; // Geminiからの応答テキスト全体
+    } catch (primaryError: any) {
+      console.warn(`Primary model (${PRIMARY_MODEL_NAME}) failed:`, primaryError.message);
+      console.log(`Attempting fallback generation with model: ${FALLBACK_MODEL_NAME}`);
 
-      if (!response.candidates || response.candidates.length === 0) {
-         console.error("Model returned no candidates.");
-         if (response.promptFeedback?.blockReason) {
-            const blockReason = response.promptFeedback.blockReason;
-            const blockMessage = response.promptFeedback.blockReasonMessage || "Content blocked by safety settings.";
-            console.error(`Request blocked. Reason: ${blockReason}, Message: ${blockMessage}`);
-            return NextResponse.json(
-              { success: false, error: { message: `Request blocked: ${blockMessage}`, code: `BLOCKED_CONTENT_${blockReason}`, details: response.promptFeedback } },
-              { status: 400 }
-            );
+      try {
+        // 2回目の試行 (フォールバックモデル)
+        const generationConfig: GenerateContentConfig = {};
+        response = await ai.models.generateContent({
+          model: FALLBACK_MODEL_NAME,
+          contents: contentsForApi,
+          config: {
+            ...generationConfig,
+            systemInstruction: systemInstructionContent,
+          },
+        });
+        console.log(`Generation successful with fallback model: ${FALLBACK_MODEL_NAME}`);
+
+      } catch (fallbackError: any) {
+        // フォールバックも失敗した場合のエラーハンドリング
+        console.error(`Fallback model (${FALLBACK_MODEL_NAME}) also failed:`, fallbackError);
+        console.error("Gemini API call error (Primary):", primaryError); // 元のエラーもログに出力
+        const errorDetails: any = {
+             name: fallbackError.name || primaryError.name,
+             message: fallbackError.message || primaryError.message || "An error occurred during Gemini API call after fallback.",
+             stack: process.env.NODE_ENV !== 'production' ? (fallbackError.stack || primaryError.stack) : undefined,
+             primaryError: { name: primaryError.name, message: primaryError.message },
+             fallbackError: { name: fallbackError.name, message: fallbackError.message },
+        };
+         if (fallbackError.cause || primaryError.cause) {
+             errorDetails.cause = fallbackError.cause?.message || primaryError.cause?.message || fallbackError.cause || primaryError.cause;
          }
-          console.error("Model returned no valid candidates.");
+         if (fallbackError.status || primaryError.status) {
+              errorDetails.apiStatus = fallbackError.status || primaryError.status;
+         }
+          if (fallbackError.error || primaryError.error) {
+               errorDetails.apiError = fallbackError.error || primaryError.error;
+         }
+        return NextResponse.json(
+          { success: false, error: { message: errorDetails.message, code: fallbackError.code || primaryError.code || "GEMINI_API_FALLBACK_ERROR", details: errorDetails } },
+          { status: fallbackError.status || primaryError.status || 500 }
+        );
+      }
+    }
+    // --- ▲ Gemini API 呼び出しとリトライロジック ▲ ---
+
+
+    // --- ▼ レスポンス処理 (変更なし) ▼ ---
+    const resultText = response.text; // Geminiからの応答テキスト全体
+
+    if (!response.candidates || response.candidates.length === 0) {
+       console.error("Model returned no candidates.");
+       if (response.promptFeedback?.blockReason) {
+          const blockReason = response.promptFeedback.blockReason;
+          const blockMessage = response.promptFeedback.blockReasonMessage || "Content blocked by safety settings.";
+          console.error(`Request blocked. Reason: ${blockReason}, Message: ${blockMessage}`);
           return NextResponse.json(
-            { success: false, error: { message: "AI model did not return valid candidates.", code: "NO_VALID_CANDIDATES", details: response } },
-            { status: 500 }
+            { success: false, error: { message: `Request blocked: ${blockMessage}`, code: `BLOCKED_CONTENT_${blockReason}`, details: response.promptFeedback } },
+            { status: 400 }
           );
-      }
-
-      if (!resultText) {
-           console.error("Model returned candidates but no text content.");
-             return NextResponse.json(
-              { success: false, error: { message: "AI model returned candidates but no text content.", code: "NO_TEXT_CONTENT", details: response } },
-              { status: 500 }
-            );
-      }
-
-      // コード抽出
-      let slideMarkdown: string | null = null;
-      let cssCode: string | null = null;
-
-      if (effectiveTaskType === "GenerateSlideContent") {
-        slideMarkdown = extractMarkdownCode(resultText);
-      } else if (effectiveTaskType === "GenerateTheme") {
-        cssCode = extractCssCode(resultText);
-      }
-
-      // 新しいレスポンス形式で返す
-      return NextResponse.json({
-        success: true,
-        result: {
-          text: resultText, // 応答テキスト全体
-          slideMarkdown: slideMarkdown, // スライドMarkdown (あれば)
-          cssCode: cssCode,         // CSSコード (あれば)
-        },
-      });
-      // --- ▲ レスポンス処理 (修正) ▲ ---
-
-    } catch (genaiError: any) {
-       console.error("Gemini API call error:", genaiError);
-      const errorDetails: any = {
-           name: genaiError.name,
-           message: genaiError.message,
-           stack: process.env.NODE_ENV !== 'production' ? genaiError.stack : undefined,
-      };
-      if (genaiError.cause) {
-          console.error("API Error Cause:", genaiError.cause);
-          errorDetails.cause = genaiError.cause.message || genaiError.cause;
-      }
-      if (genaiError.status) {
-           console.error("API Error Status:", genaiError.status);
-           errorDetails.apiStatus = genaiError.status;
-      }
-       if (genaiError.error) {
-           console.error("API Error Body:", genaiError.error);
-            errorDetails.apiError = genaiError.error;
-      }
-      return NextResponse.json(
-        { success: false, error: { message: genaiError.message || "An error occurred while calling the Gemini API.", code: genaiError.code || "GEMINI_API_ERROR", details: errorDetails } },
-        { status: genaiError.status || 500 }
-      );
+       }
+        console.error("Model returned no valid candidates.");
+        return NextResponse.json(
+          { success: false, error: { message: "AI model did not return valid candidates.", code: "NO_VALID_CANDIDATES", details: response } },
+          { status: 500 }
+        );
     }
 
+    if (!resultText) {
+         console.error("Model returned candidates but no text content.");
+           return NextResponse.json(
+            { success: false, error: { message: "AI model returned candidates but no text content.", code: "NO_TEXT_CONTENT", details: response } },
+            { status: 500 }
+          );
+    }
+
+    // コード抽出
+    let slideMarkdown: string | null = null;
+    let cssCode: string | null = null;
+
+    if (effectiveTaskType === "GenerateSlideContent") {
+      slideMarkdown = extractMarkdownCode(resultText);
+    } else if (effectiveTaskType === "GenerateTheme") {
+      cssCode = extractCssCode(resultText);
+    }
+
+    // 新しいレスポンス形式で返す
+    return NextResponse.json({
+      success: true,
+      result: {
+        text: resultText, // 応答テキスト全体
+        slideMarkdown: slideMarkdown, // スライドMarkdown (あれば)
+        cssCode: cssCode,         // CSSコード (あれば)
+      },
+    });
+    // --- ▲ レスポンス処理 (変更なし) ▲ ---
+
   } catch (error: any) {
+     // この catch は主にリクエスト処理中の予期せぬエラー (JSONパースエラーなど) を捕捉
      console.error("Server error:", error);
     const errorDetails: any = {
          name: error.name,

@@ -1,5 +1,3 @@
-// lib/types.ts
-
 export interface DocumentType {
   id: string;
   title: string;

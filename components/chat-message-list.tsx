@@ -124,10 +124,11 @@ export const ChatMessageList = React.memo(
                          "prose-ul:text-primary-foreground",
                          "prose-ol:text-primary-foreground",
                          "prose-li:text-primary-foreground",
-                         "prose-blockquote:text-primary-foreground/90", // 少し薄くする場合
-                         "prose-a:text-primary-foreground/90 hover:prose-a:text-primary-foreground", // リンク色
-                         "prose-code:text-primary-foreground", // インラインコードの色
-                         // ダークモード時の上書きも必要なら追加: dark:prose-p:text-primary-foreground など
+                         "prose-blockquote:text-primary-foreground/90",
+                         "prose-a:text-primary-foreground/90 hover:prose-a:text-primary-foreground",
+                         // ★ インラインコードの色を調整 (ライト/ダーク)
+                         "prose-code:text-primary-foreground dark:prose-code:text-primary-foreground",
+                         "prose-code:bg-primary/20 dark:prose-code:bg-primary/30", // 背景も少し調整
                        ]
                        // ▲ ユーザーメッセージの場合、proseのデフォルト色を上書き ▲
                     )}>
@@ -136,9 +137,14 @@ export const ChatMessageList = React.memo(
                         components={{
                           pre({ node, className, children, ...props }) {
                             const preProps = props as ClassAttributes<HTMLPreElement> & HTMLAttributes<HTMLPreElement>;
-                            // コードブロックの背景は共通で良いか、ユーザーメッセージで変えるか検討
+                            // ★ コードブロックの背景と文字色をテーマに合わせて調整
                             return (
-                              <pre className={cn(className, "bg-black/80 text-white p-2 rounded overflow-x-auto my-2")} {...preProps}>
+                              <pre className={cn(
+                                className,
+                                "p-2 rounded overflow-x-auto my-2",
+                                // ライトテーマ: 暗い文字、明るい背景
+                                "bg-gray-100 text-gray-900 dark:bg-black/80 dark:text-white"
+                                )} {...preProps}>
                                 {children}
                               </pre>
                             );
@@ -146,13 +152,24 @@ export const ChatMessageList = React.memo(
                           code({ node, inline, className, children, ...props }: CodeProps) {
                             const codeProps = props as ClassAttributes<HTMLElement> & HTMLAttributes<HTMLElement>;
                             const match = /language-(\w+)/.exec(className || '');
-                            // インラインコードは prose-code で色指定されるので、ここではクラス付与のみ
+                            // ★ インラインコードは prose-code で指定されるため、ブロックレベルコードのみ調整
                             return !inline ? (
-                              <code className={cn(className, "font-mono text-xs text-white p-0 bg-transparent")} {...codeProps}>
+                              <code className={cn(
+                                className,
+                                "font-mono text-xs p-0 bg-transparent",
+                                // ★ ブロックレベルコードの文字色を pre と合わせる (ダークテーマ時のみ白)
+                                "dark:text-white"
+                                )} {...codeProps}>
                                 {children}
                               </code>
                             ) : (
-                              <code className={cn(className, "rounded px-1 py-0.5 font-mono text-xs")} {...codeProps}>
+                              // ★ インラインコードのスタイル (prose-codeで指定されるが念のため)
+                              <code className={cn(
+                                className,
+                                "rounded px-1 py-0.5 font-mono text-xs",
+                                // ユーザーメッセージの場合は prose-code:... で上書きされる
+                                message.role !== 'user' && "bg-muted text-foreground dark:bg-muted dark:text-foreground"
+                                )} {...codeProps}>
                                 {children}
                               </code>
                             );
@@ -215,11 +232,11 @@ export const ChatMessageList = React.memo(
                     )}
                   </div>
                 )}
-                {message.role === "system" && (
+                {/* {message.role === "system" && (
                   <div className="my-2 w-full rounded bg-destructive/10 px-2 py-1 text-center text-xs italic text-destructive">
                     {message.content}
                   </div>
-                )}
+                )} */}
                 {message.role === "user" && (
                   <Avatar className="h-6 w-6 flex-shrink-0">
                     <AvatarFallback>

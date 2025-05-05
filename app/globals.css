@@ -70,11 +70,9 @@
   body {
     @apply bg-background text-foreground;
     font-family: Arial, Helvetica, sans-serif;
-    /* styles/globals.css から移動 */
   }
 }
 
-/* styles/globals.css にあったものをここに統合 */
 @layer utilities {
   .text-balance {
     text-wrap: balance;
