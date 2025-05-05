@@ -1,4 +1,3 @@
-// components/preview-pane.tsx
 "use client";
 
 import React, { useState, useEffect, useRef, useLayoutEffect, useCallback } from "react";

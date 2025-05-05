@@ -1,4 +1,3 @@
-// lib/db.ts
 import type { DocumentType, ChatMessageType, ImageType } from "./types";
 import { v4 as uuidv4 } from "uuid";
 // 定数をインポート

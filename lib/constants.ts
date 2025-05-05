@@ -1,4 +1,3 @@
-// lib/constants.ts
 export const DB_NAME = "MarpSlideCreatorDB";
 export const DB_VERSION = 5; // 必要に応じてバージョンを更新
 export const DOC_STORE = "documents";

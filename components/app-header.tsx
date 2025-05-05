@@ -1,4 +1,3 @@
-// components/app-header.tsx
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
@@ -13,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ExportDropdown } from "@/components/export-dropdown";
-import { ThemeToggle } from "./theme-toggle"; // ★ ThemeToggle をインポート
+import { ThemeToggle } from "./theme-toggle";
 import {
   MessageSquareIcon,
   CodeIcon,
@@ -23,6 +22,7 @@ import {
   ColumnsIcon,
   PanelRightIcon,
   PanelBottomIcon,
+  HelpCircleIcon, // ★ HelpCircleIcon をインポート
 } from "lucide-react";
 import type { DocumentType } from "@/lib/types";
 import type { LayoutMode } from "@/lib/constants";
@@ -36,6 +36,7 @@ interface AppHeaderProps {
   isPreviewVisible: boolean;
   togglePanel: (panel: "chat" | "editor" | "preview") => void;
   visiblePanelsCount: number;
+  onOpenHelpDialog: () => void; // ★ ヘルプダイアログを開く関数を受け取るプロップを追加
 }
 
 export const AppHeader: React.FC<AppHeaderProps> = React.memo(
@@ -48,6 +49,7 @@ export const AppHeader: React.FC<AppHeaderProps> = React.memo(
     isPreviewVisible,
     togglePanel,
     visiblePanelsCount,
+    onOpenHelpDialog, // ★ プロップを受け取る
   }) => {
     return (
       <header className="flex flex-shrink-0 items-center justify-between border-b p-2">
@@ -129,8 +131,14 @@ export const AppHeader: React.FC<AppHeaderProps> = React.memo(
             currentDocument={currentDocument}
           />
 
-          {/* --- ★ テーマ切り替えボタンを追加 --- */}
+          {/* テーマ切り替えボタン */}
           <ThemeToggle />
+
+          {/* --- ★ ヘルプボタンを追加 --- */}
+          <Separator orientation="vertical" className="mx-1 h-6" />
+          <Button variant="outline" size="icon" onClick={onOpenHelpDialog} aria-label="ヘルプを開く">
+            <HelpCircleIcon className="h-4 w-4" />
+          </Button>
           {/* --- ここまで --- */}
         </div>
       </header>

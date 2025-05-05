@@ -1,4 +1,3 @@
-// components/chat-pane.tsx
 "use client";
 
 import React from "react";
