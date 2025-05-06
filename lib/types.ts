@@ -12,11 +12,11 @@ export interface ChatMessageType {
   id: string;
   documentId: string;
   role: "user" | "assistant" | "system";
-  content: string; // 応答文テキスト
+  content: string; // 応答文テキスト (JSON文字列の場合もある)
   timestamp: Date;
-  // markdownCode?: string | null; // ← 廃止またはコメントアウト
-  slideMarkdown?: string | null; // スライド用Markdownコード (新規)
-  cssCode?: string | null; // CSSコード (新規)
+  slideMarkdown?: string | null; // スライド用Markdownコード
+  cssCode?: string | null; // CSSコード
+  explanation?: string | null; // ★ AIによる説明/思考プロセスを追加
 }
 
 export interface ImageType {
@@ -42,10 +42,10 @@ export interface GeminiRequestType {
 export interface GeminiResponseType {
   success: boolean;
   result?: {
-    text: string; // 応答文テキスト (必須)
-    slideMarkdown?: string | null; // スライド用Markdownコード (任意・新規)
-    cssCode?: string | null; // CSSコード (任意・新規)
-    // markdownCode?: string | null; // ← 廃止またはコメントアウト
+    text: string; // 応答文テキスト (JSON文字列または通常のテキスト)
+    slideMarkdown?: string | null; // スライド用Markdownコード
+    cssCode?: string | null; // CSSコード
+    explanation?: string | null; // ★ AIによる説明/思考プロセスを追加
   };
   error?: {
     message: string;

@@ -49,7 +49,7 @@ export const EditorPane = React.memo(({
   const [lastSavedContent, setLastSavedContent] = useState<string | null>(null);
   const isMountedRef = useRef(false);
 
-  // 初期コンテンツを保存済みとして設定 (変更なし)
+  // 初期コンテンツを保存済みとして設定
   useEffect(() => {
     if (currentDocument) {
       setLastSavedContent(currentDocument.content);
@@ -60,7 +60,7 @@ export const EditorPane = React.memo(({
     };
   }, [currentDocument]);
 
-  // 自動保存ロジック (変更なし)
+  // 自動保存ロジック
   useEffect(() => {
     if (!isMountedRef.current || !isDbInitialized || !currentDocument) {
       return;
@@ -130,7 +130,7 @@ export const EditorPane = React.memo(({
     [onChange] // 依存配列は onChange のみ
   );
 
-  // 画像参照を挿入する関数 (変更なし)
+  // 画像参照を挿入する関数
   const handleInsertImageReference = useCallback(
     (reference: string) => {
       insertTextAtCursor(reference);
@@ -138,7 +138,7 @@ export const EditorPane = React.memo(({
     [insertTextAtCursor]
   );
 
-  // 個別のツールバーアクションハンドラ (変更なし)
+  // 個別のツールバーアクションハンドラ
   const handleH1Click = useCallback(() => insertTextAtCursor("# "), [insertTextAtCursor]);
   const handleH2Click = useCallback(() => insertTextAtCursor("## "), [insertTextAtCursor]);
   const handleBoldClick = useCallback(() => insertTextAtCursor("**", "**"), [insertTextAtCursor]);
@@ -158,21 +158,21 @@ export const EditorPane = React.memo(({
     }
   }, [insertTextAtCursor]);
 
-  // スクロール位置の保持 (ユーザー操作や外部からの変更時) (変更なし)
+  // スクロール位置の保持 (ユーザー操作や外部からの変更時)
   const handleScroll = useCallback(() => {
     if (textareaRef.current) {
       editorScrollTopRef.current = textareaRef.current.scrollTop;
     }
   }, []);
 
-  // 外部から markdown プロップが変更された場合にスクロール位置を復元 (変更なし)
+  // 外部から markdown プロップが変更された場合にスクロール位置を復元
   useLayoutEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.scrollTop = editorScrollTopRef.current;
     }
   }, [markdown]);
 
-  // Render (変更なし)
+  // Render
   if (!currentDocument) {
     return (
       <div className="flex h-full flex-col items-center justify-center p-4 text-center text-muted-foreground">
@@ -184,7 +184,7 @@ export const EditorPane = React.memo(({
 
   return (
     <div className="flex h-full flex-col">
-      {/* ヘッダー (変更なし) */}
+      {/* ヘッダー */}
       <div className="flex items-center justify-between border-b p-2">
         <h3 className="truncate text-sm font-medium" title={currentDocument.title}>
           {currentDocument.title}
@@ -194,7 +194,7 @@ export const EditorPane = React.memo(({
         </div>
       </div>
 
-      {/* ツールバーコンポーネントに Undo/Redo 関連の props を渡す (変更なし) */}
+      {/* ツールバーコンポーネントに Undo/Redo 関連の props を渡す */}
       <EditorToolbar
         onH1Click={handleH1Click}
         onH2Click={handleH2Click}
@@ -220,7 +220,7 @@ export const EditorPane = React.memo(({
         // --- ▲ Undo/Redo 関連の props を渡す ▲ ---
       />
 
-      {/* テキストエリア (変更なし) */}
+      {/* テキストエリア */}
       <Textarea
         ref={textareaRef}
         value={markdown}

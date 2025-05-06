@@ -56,7 +56,7 @@ export function initializeDB(): Promise<void> {
 
       console.log(`Upgrading from version ${event.oldVersion} to ${event.newVersion}`);
 
-      // documents ストア作成 (変更なし)
+      // documents ストア作成
       if (!currentDb.objectStoreNames.contains(DOC_STORE)) {
         currentDb.createObjectStore(DOC_STORE, { keyPath: "id" });
         console.log(`Object store "${DOC_STORE}" created.`);
@@ -76,7 +76,7 @@ export function initializeDB(): Promise<void> {
         console.log(`Object store "${CHAT_STORE}" already exists. New fields (slideMarkdown, cssCode) will be added on update/add.`);
       }
 
-      // images ストア作成 (変更なし)
+      // images ストア作成
       if (!currentDb.objectStoreNames.contains(IMAGE_STORE)) {
         const imageStore = currentDb.createObjectStore(IMAGE_STORE, { keyPath: "id" });
         imageStore.createIndex("createdAt", "createdAt", { unique: false });
@@ -101,7 +101,7 @@ export function initializeDB(): Promise<void> {
   return initializePromise;
 }
 
-// --- ヘルパー関数: トランザクション取得 (変更なし) ---
+// --- ヘルパー関数: トランザクション取得 ---
 function getStore(storeName: string, mode: IDBTransactionMode): IDBObjectStore {
   if (!db) {
     console.error("Database is not initialized or connection lost.");
@@ -129,7 +129,7 @@ function getStore(storeName: string, mode: IDBTransactionMode): IDBObjectStore {
   }
 }
 
-// --- ドキュメント関連関数 (変更なし) ---
+// --- ドキュメント関連関数 ---
 export async function getDocument(id: string): Promise<DocumentType | null> {
   const store = getStore(DOC_STORE, "readonly");
   return new Promise((resolve, reject) => {
@@ -321,7 +321,7 @@ export async function clearChatMessages(documentId: string): Promise<void> {
 }
 // --- ▲ チャットメッセージ関連関数 (修正) ▲ ---
 
-// --- 画像関連関数 (変更なし) ---
+// --- 画像関連関数 ---
 export async function addImage(imageData: Omit<ImageType, "id" | "createdAt">): Promise<string> {
     const id = uuidv4();
     const newImage: ImageType = { ...imageData, id, createdAt: new Date() };

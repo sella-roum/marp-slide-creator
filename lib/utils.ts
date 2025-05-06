@@ -26,44 +26,31 @@ export function debounce<T extends (...args: any[]) => any>(
   };
 }
 
-// extractMarkdownCode 関数
+// --- ★ extractMarkdownCode 関数を修正 ---
+/**
+ * テキストから最初の Marp または Markdown コードブロック (```markdown ... ``` または ```marp ... ```) の中身を抽出します。
+ * ラベル付きのコードブロックが見つからない場合は null を返します。
+ * @param text 検索対象のテキスト
+ * @returns 抽出された Markdown コード、または見つからない場合は null
+ */
 export function extractMarkdownCode(text: string): string | null {
-  const marpStartRegex = /^(?:---|\s*#)/m;
-  const startIndex = text.search(marpStartRegex);
+  // 正規表現: ``` で始まり、markdown または marp ラベルが続き、任意の空白文字を挟んで、
+  // 任意の文字（改行含む、非貪欲マッチ）が続き、``` で終わるパターン
+  const markdownCodeBlockRegex = /```(?:markdown|marp)\s*([\s\S]*?)\s*```/;
+  const match = text.match(markdownCodeBlockRegex);
 
-  if (startIndex !== -1) {
-    let extracted = text.substring(startIndex).trim();
-    const fullCodeBlockMatch = extracted.match(/^```(?:markdown|marp)?\s*([\s\S]*?)\s*```$/);
-    if (fullCodeBlockMatch && fullCodeBlockMatch[1]) {
-      console.log("Extracted content from full code block.");
-      return fullCodeBlockMatch[1].trim();
-    }
-    extracted = extracted.replace(/\s*```$/, "").trim();
-    console.log("Extracted content from Marp start pattern.");
-    return extracted;
+  if (match && match[1]) {
+    console.log("Extracted content from labeled Markdown/Marp code block.");
+    // キャプチャグループ1（コードブロックの中身）をトリムして返す
+    return match[1].trim();
   }
 
-  console.log("Marp start pattern not found, trying specific code block extraction...");
-  const specificCodeBlockRegex = /```(?:markdown|marp)\s*([\s\S]*?)```/g;
-  const matches = [...text.matchAll(specificCodeBlockRegex)];
-  if (matches.length > 0 && matches[0]) {
-    console.log("Extracted content from specific labeled code block.");
-    return matches[0][1].trim();
-  }
-
-  console.log("Specific code block not found, trying any code block...");
-  const anyCodeBlockRegex = /```([\s\S]*?)```/;
-  const anyMatch = text.match(anyCodeBlockRegex);
-  if (anyMatch && anyMatch[1]) {
-    console.log("Extracted content from any code block.");
-    return anyMatch[1].trim();
-  }
-
-  console.log("No Marp content or code block found.");
-  return null;
+  console.log("No labeled Markdown/Marp code block found.");
+  return null; // ラベル付きのブロックが見つからない場合は null を返す
 }
+// --- extractMarkdownCode 関数ここまで ---
 
-// --- ★ extractCssCode 関数を追加 ---
+// --- extractCssCode 関数 ---
 /**
  * テキストから最初の CSS コードブロック (```css ... ```) の中身を抽出します。
  * @param text 検索対象のテキスト

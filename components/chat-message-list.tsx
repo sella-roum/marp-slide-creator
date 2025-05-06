@@ -6,6 +6,7 @@ import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import {
   BotIcon,
   UserIcon,
@@ -14,12 +15,13 @@ import {
   Loader2Icon,
   ClipboardPasteIcon,
   PaletteIcon,
+  InfoIcon,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ChatMessageType } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-// rehype-sanitize のスキーマをカスタマイズしてクラス属性を許可
+// rehype-sanitize のスキーマ
 const schema = {
   ...defaultSchema,
   attributes: {
@@ -75,6 +77,28 @@ export const ChatMessageList = React.memo(
       }
     }, [setViewportRef]);
 
+    // explanation を表示するヘルパーコンポーネント
+    const ExplanationDisplay = ({ text }: { text: string }) => (
+      <div className="mt-2 pt-2 border-t border-muted-foreground/20 text-xs text-muted-foreground italic">
+         <div className="flex items-start gap-1">
+            <InfoIcon className="h-3 w-3 mt-0.5 flex-shrink-0" />
+            <p className="flex-1">{text}</p>
+         </div>
+      </div>
+    );
+
+    // ★ CSSコードブロックを表示するヘルパーコンポーネント
+    const CssCodeBlock = ({ code }: { code: string }) => (
+        <pre className={cn(
+            "p-2 rounded overflow-x-auto my-2 text-xs", // text-xs を追加
+            "bg-gray-100 text-gray-900 dark:bg-black/80 dark:text-white"
+            )}>
+            <code className="font-mono bg-transparent dark:text-white">
+                {code}
+            </code>
+        </pre>
+    );
+
     return (
       <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
         <div className="space-y-4">
@@ -105,87 +129,69 @@ export const ChatMessageList = React.memo(
                 )}
                 {message.role !== "system" && (
                   <div
-                    className={cn( // cnユーティリティを使用
+                    className={cn(
                       "max-w-[95%] sm:max-w-[85%] md:max-w-[80%] rounded-lg p-3 break-words",
                       message.role === "user"
-                        ? "bg-primary text-primary-foreground" // ユーザーメッセージの背景と基本文字色
-                        : "bg-muted" // アシスタントメッセージの背景
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted"
                     )}
                   >
-                    {/* proseクラスを適用するラッパーdiv */}
-                    <div className={cn(
-                       "prose prose-sm dark:prose-invert max-w-none",
-                       "prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-pre:my-2 prose-blockquote:my-1",
-                       // ▼ ユーザーメッセージの場合、proseのデフォルト色を上書き ▼
-                       message.role === 'user' && [
-                         "prose-headings:text-primary-foreground",
-                         "prose-p:text-primary-foreground",
-                         "prose-strong:text-primary-foreground",
-                         "prose-ul:text-primary-foreground",
-                         "prose-ol:text-primary-foreground",
-                         "prose-li:text-primary-foreground",
-                         "prose-blockquote:text-primary-foreground/90",
-                         "prose-a:text-primary-foreground/90 hover:prose-a:text-primary-foreground",
-                         // ★ インラインコードの色を調整 (ライト/ダーク)
-                         "prose-code:text-primary-foreground dark:prose-code:text-primary-foreground",
-                         "prose-code:bg-primary/20 dark:prose-code:bg-primary/30", // 背景も少し調整
-                       ]
-                       // ▲ ユーザーメッセージの場合、proseのデフォルト色を上書き ▲
-                    )}>
-                      <ReactMarkdown
-                        rehypePlugins={[[rehypeSanitize, schema]]}
-                        components={{
-                          pre({ node, className, children, ...props }) {
-                            const preProps = props as ClassAttributes<HTMLPreElement> & HTMLAttributes<HTMLPreElement>;
-                            // ★ コードブロックの背景と文字色をテーマに合わせて調整
-                            return (
-                              <pre className={cn(
-                                className,
-                                "p-2 rounded overflow-x-auto my-2",
-                                // ライトテーマ: 暗い文字、明るい背景
-                                "bg-gray-100 text-gray-900 dark:bg-black/80 dark:text-white"
-                                )} {...preProps}>
-                                {children}
-                              </pre>
-                            );
-                          },
-                          code({ node, inline, className, children, ...props }: CodeProps) {
-                            const codeProps = props as ClassAttributes<HTMLElement> & HTMLAttributes<HTMLElement>;
-                            const match = /language-(\w+)/.exec(className || '');
-                            // ★ インラインコードは prose-code で指定されるため、ブロックレベルコードのみ調整
-                            return !inline ? (
-                              <code className={cn(
-                                className,
-                                "font-mono text-xs p-0 bg-transparent",
-                                // ★ ブロックレベルコードの文字色を pre と合わせる (ダークテーマ時のみ白)
-                                "dark:text-white"
-                                )} {...codeProps}>
-                                {children}
-                              </code>
-                            ) : (
-                              // ★ インラインコードのスタイル (prose-codeで指定されるが念のため)
-                              <code className={cn(
-                                className,
-                                "rounded px-1 py-0.5 font-mono text-xs",
-                                // ユーザーメッセージの場合は prose-code:... で上書きされる
-                                message.role !== 'user' && "bg-muted text-foreground dark:bg-muted dark:text-foreground"
-                                )} {...codeProps}>
-                                {children}
-                              </code>
-                            );
-                          },
-                          a({ node, ...props }) {
-                             const anchorProps = props as ClassAttributes<HTMLAnchorElement> & HTMLAttributes<HTMLAnchorElement>;
-                             // prose-a で色指定されるので、ここではクラス付与のみ
-                             return <a target="_blank" rel="noopener noreferrer" className="hover:underline" {...anchorProps} />;
-                          }
-                        }}
-                      >
-                        {message.content}
-                      </ReactMarkdown>
-                    </div>
+                    {/* ★ アシスタントメッセージの表示ロジックを修正 */}
+                    {message.role === "assistant" ? (
+                      <>
+                        {/* slideMarkdown があればそれを表示 */}
+                        {message.slideMarkdown ? (
+                          <div className={cn(
+                            "prose prose-sm dark:prose-invert max-w-none",
+                            "prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-pre:my-2 prose-blockquote:my-1"
+                          )}>
+                            <ReactMarkdown rehypePlugins={[[rehypeSanitize, schema]]}>
+                              {message.slideMarkdown}
+                            </ReactMarkdown>
+                          </div>
+                        ) : message.cssCode ? (
+                          // cssCode があればそれをコードブロックで表示
+                          <CssCodeBlock code={message.cssCode} />
+                        ) : (
+                          // どちらもなければ content (explanation等) を表示
+                          <div className={cn(
+                            "prose prose-sm dark:prose-invert max-w-none",
+                            "prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-pre:my-2 prose-blockquote:my-1"
+                          )}>
+                            <ReactMarkdown rehypePlugins={[[rehypeSanitize, schema]]}>
+                              {message.content}
+                            </ReactMarkdown>
+                          </div>
+                        )}
+                        {/* explanation があり、かつコードも表示している場合に補足表示 */}
+                        {message.explanation && (message.slideMarkdown || message.cssCode) && (
+                          <ExplanationDisplay text={message.explanation} />
+                        )}
+                      </>
+                    ) : (
+                      // ユーザーメッセージは従来通り content を表示
+                      <div className={cn(
+                        "prose prose-sm dark:prose-invert max-w-none",
+                        "prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-pre:my-2 prose-blockquote:my-1",
+                        "prose-headings:text-primary-foreground",
+                        "prose-p:text-primary-foreground",
+                        "prose-strong:text-primary-foreground",
+                        "prose-ul:text-primary-foreground",
+                        "prose-ol:text-primary-foreground",
+                        "prose-li:text-primary-foreground",
+                        "prose-blockquote:text-primary-foreground/90",
+                        "prose-a:text-primary-foreground/90 hover:prose-a:text-primary-foreground",
+                        "prose-code:text-primary-foreground dark:prose-code:text-primary-foreground",
+                        "prose-code:bg-primary/20 dark:prose-code:bg-primary/30",
+                      )}>
+                        <ReactMarkdown rehypePlugins={[[rehypeSanitize, schema]]}>
+                          {message.content}
+                        </ReactMarkdown>
+                      </div>
+                    )}
+                    {/* ★ ここまで表示ロジック修正 */}
 
-                    {/* ボタン表示ロジック (変更なし) */}
+                    {/* ボタン表示ロジック */}
                     {message.role === "assistant" && (message.slideMarkdown || message.cssCode) && (
                       <div className="mt-2 flex flex-wrap gap-2 border-t border-muted-foreground/20 pt-2">
                         {message.slideMarkdown && (
@@ -232,11 +238,6 @@ export const ChatMessageList = React.memo(
                     )}
                   </div>
                 )}
-                {/* {message.role === "system" && (
-                  <div className="my-2 w-full rounded bg-destructive/10 px-2 py-1 text-center text-xs italic text-destructive">
-                    {message.content}
-                  </div>
-                )} */}
                 {message.role === "user" && (
                   <Avatar className="h-6 w-6 flex-shrink-0">
                     <AvatarFallback>
